@@ -12,7 +12,7 @@ from typing import Optional
 
 import typer
 
-from . import RECORDER, render, store
+from . import RECORDER, analysis, render, store
 from .render import console
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, rich_markup_mode="rich",
@@ -72,6 +72,57 @@ def runs():
     if not rows:
         console.print("[dim]no runs yet — try[/] rewind record -- node app.js"); return
     render.runs_table(rows)
+
+
+def _load(ref):
+    db = _db()
+    row = _run(db, ref)
+    return row, analysis.Run(store.events(db, row["id"]), dict(row))
+
+
+def _title(row) -> str:
+    return f"run {row['id']}" + (f" ({row['label']})" if row["label"] else "")
+
+
+def _ctx_aid(e):
+    return e.aid if e.kind.startswith("async.") else e.eid
+
+
+@app.command()
+def timeline(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
+             request: Optional[int] = typer.Option(None, "--request", "-r", help="Only events of request #N."),
+             kind: Optional[str] = typer.Option(None, "--kind", "-k", help="Comma list: log,http,error,mutation,async,run."),
+             callbacks: bool = typer.Option(False, "--callbacks", "-c", help="Also show each user callback firing."),
+             raw: bool = typer.Option(False, "--raw", help="Every recorded event, unfiltered.")):
+    """Ordered story of a run: requests, logs, errors, mutations (and optionally callback firings)."""
+    row, r = _load(run)
+    rows = r.events if raw else sorted(r.story + (r.callback_fires() if callbacks else []), key=lambda e: e.seq)
+    if kind:
+        ks = [k.strip() for k in kind.split(",")]
+        rows = [e for e in rows if e.kind in ks or e.kind.split(".")[0] in ks]
+    if request is not None:
+        if request not in r.requests:
+            have = ", ".join(f"#{i}" for i in r.requests) or "none"
+            render.fail(f"run has no request #{request} (has {have})"); raise typer.Exit(2)
+        rows = [e for e in rows if r.request_of(_ctx_aid(e)) == request]
+    render.header(f"timeline · {_title(row)} · {render.plural(len(rows), 'event')} shown of {row['event_count']:,} recorded")
+    render.timeline(r, rows)
+
+
+@app.command()
+def tree(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
+         request: Optional[int] = typer.Option(None, "--request", "-r", help="Root the tree at request #N."),
+         full: bool = typer.Option(False, "--full", help="Show every async resource, including quiet and internal ones.")):
+    """Async causality tree: who scheduled whom, and what each callback did."""
+    row, r = _load(run)
+    root = 1
+    if request is not None:
+        if request not in r.requests:
+            render.fail(f"run has no request #{request}"); raise typer.Exit(2)
+        root = r.requests[request].anchor
+    node, pruned = analysis.build_tree(r, root, full)
+    render.header(f"async tree · {_title(row)}")
+    render.tree(r, node, pruned, "main module" if root == 1 else r.requests[request].label)
 
 
 def main():

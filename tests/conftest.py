@@ -31,7 +31,7 @@ class Run:
 @pytest.fixture
 def record(tmp_path):
     def _record(fixture, env=None, recorder=True, kill_when=None):
-        out = tmp_path / (fixture + ".ndjson")
+        out = tmp_path / (Path(fixture).name + ".ndjson")
         e = {**os.environ, **(env or {})}
         if recorder:
             e["REWIND_OUT"] = str(out)

@@ -31,3 +31,16 @@ def test_errors_are_friendly(tmp_path):
     assert rw("runs", home=tmp_path).stdout.startswith("no runs yet")
     r = rw("record", home=tmp_path)
     assert r.returncode == 2 and "nothing to record" in r.stdout
+
+
+def test_timeline_and_tree_on_demo(tmp_path):
+    rw("record", "-l", "bad", "-w", "currentCart", "--", "node", "demo/traffic.js", home=tmp_path)
+    t = rw("timeline", "bad", "-r", "3", "-c", home=tmp_path)
+    assert t.returncode == 0 and "TypeError" in t.stdout and "charged $161" not in t.stdout
+    assert "paymentConfirmed" in t.stdout and "currentCart" in t.stdout
+    k = rw("timeline", "--kind", "mutation", home=tmp_path)
+    assert k.stdout.count("checkout.js:12:5") == 3
+    tr = rw("tree", home=tmp_path)
+    assert tr.returncode == 0 and "#3 POST /order" in tr.stdout and "loadCart" in tr.stdout and "hidden" in tr.stdout
+    bad = rw("timeline", "-r", "9", home=tmp_path)
+    assert bad.returncode == 2 and "no request #9" in bad.stdout

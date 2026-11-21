@@ -65,3 +65,111 @@ def runs_table(rows):
                   f"{r['event_count']:,}", f"[err]{r['error_count']}[/]" if r["error_count"] else "[faint]0[/]",
                   str(r["exit_code"]), f"[dim]{ago(r['started_at'])}[/]", f"[dim]{cmd}[/]")
     console.print(t)
+
+
+# ---- shared bits for analysis views -------------------------------------------------
+from rich.markup import escape  # noqa: E402
+from rich.tree import Tree  # noqa: E402
+
+from . import analysis as A  # noqa: E402
+
+REQ_COLORS = ["cyan", "magenta", "yellow", "green", "blue", "bright_red"]
+GLYPH = {"run.start": "◉", "run.end": "◉", "run.signal": "◉", "http.in": "→", "http.out": "←", "log": "»",
+         "error.uncaught": "✖", "error.logged": "✖", "mutation": "✎", "mutation.capped": "✎", "async.before": "▸",
+         "instrument": "⚙"}
+LEVEL = {A.OBSERVED: "[ok]●[/]", A.DERIVED: "[accent]◆[/]", A.INFERRED: "[warn]?[/]"}
+
+
+def req_tag(rid):
+    return f"[{REQ_COLORS[(rid - 1) % len(REQ_COLORS)]}]#{rid}[/]" if rid else "[faint]··[/]"
+
+
+def clip(v, n: int = 48) -> str:
+    s = str(v)
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def kind_style(kind: str) -> str:
+    return {"http": "kind.http", "log": "kind.log", "error": "kind.error", "mutation": "kind.mutation",
+            "async": "kind.async", "run": "kind.run"}.get(kind.split(".")[0], "white")
+
+
+def event_text(run, e) -> str:
+    d = e.data or {}
+    if e.kind == "async.before":
+        return f"{escape(run.describe(e.aid))} [dim]fired · scheduled at[/] [loc]{escape(A.where(run.site(e.aid)))}[/]"
+    if e.kind == "async.init":
+        return f"{escape(run.describe(e.aid))} [dim]created at[/] [loc]{escape(A.where(A.user_frame(e.stack)))}[/]"
+    if e.kind in ("async.after", "async.resolve"):
+        return f"[dim]{escape(run.describe(e.aid))}[/]"
+    if e.kind == "mutation":
+        return (f"[fn]{escape(e.name + d.get('path', ''))}[/] {escape(d.get('op', ''))} "
+                f"[dim]{escape(clip(d.get('before')))} →[/] {escape(clip(d.get('after')))}  [loc]{escape(d.get('loc', ''))}[/]")
+    if e.kind == "mutation.capped":
+        return f"[warn]{escape(e.name)}: more than {d.get('cap')} writes, further writes counted only[/]"
+    if e.kind == "http.out":
+        st = d.get("status", 0)
+        return f"[{'err' if st >= 500 else 'ok'}]{st}[/] {escape(e.name.split(' ', 1)[1])} [dim]{d.get('ms', 0):.1f}ms[/]"
+    if e.kind in A.ERROR_KINDS:
+        return f"[err]{escape(d.get('error') or '')}: {escape(e.name or '')}[/]  [loc]{escape(A.where(A.user_frame(e.stack)))}[/]"
+    if e.kind == "run.start":
+        return f"[dim]node {escape(' '.join(d.get('argv', [])))}  {d.get('node', '')}[/]"
+    if e.kind == "run.end":
+        return f"exit {d.get('code')}"
+    if e.kind == "instrument":
+        return (f"[dim]{escape(e.name)} {escape(str(d.get('file')))} ({plural(d.get('writes', 0), 'write site')}, "
+                f"watch={','.join(d.get('watch', []))})[/]")
+    return escape(e.name or "")
+
+
+def context(run, e) -> str:
+    if e.kind.startswith(("run.", "async.")) or e.kind in ("http.in", "http.out", "instrument"):
+        return ""
+    return f"[faint]in {escape(run.describe(e.eid))}[/]"
+
+
+def timeline(run, rows, show_context=True):
+    t = Table(box=None, expand=True, header_style="dim", pad_edge=False, padding=(0, 1))
+    t.add_column("seq", justify="right", style="faint", no_wrap=True)
+    t.add_column("ms", justify="right", style="dim", no_wrap=True)
+    t.add_column("req", no_wrap=True)
+    t.add_column("", no_wrap=True)
+    t.add_column("event", ratio=3, overflow="fold")
+    if show_context:
+        t.add_column("context", ratio=1, overflow="ellipsis", no_wrap=True)
+    for e in rows:
+        rid = None if e.kind.startswith("run.") else run.request_of(e.aid if e.kind.startswith("async.") else e.eid)
+        cells = [str(e.seq), f"{e.t / 1000:.1f}", req_tag(rid), f"[{kind_style(e.kind)}]{GLYPH.get(e.kind, '·')}[/]",
+                 event_text(run, e)]
+        if show_context:
+            cells.append(context(run, e))
+        t.add_row(*cells)
+    console.print(t)
+
+
+def tree(run, root, pruned: int, title: str):
+    def label(n) -> str:
+        if n.init is None:
+            return f"[kind.run]◉[/] [bold]{escape(title)}[/]"
+        rid = run.anchors.get(n.aid)
+        hidden = f" [faint]+{n.hidden} internal[/]" if n.hidden else ""
+        if rid:
+            return f"{req_tag(rid)} [kind.http]{escape(run.requests[rid].inbound.name)}[/]{hidden}"
+        site = run.site(n.aid)
+        name = f" [fn]{escape(n.init.name)}[/]" if n.init.name and n.init.name != "<anonymous>" else ""
+        where_ = f" [dim]at[/] [loc]{escape(A.where(site))}[/] [dim]in {escape(A.short_fn(site['fn']))}[/]" if site else ""
+        ran = "" if run.fired.get(n.aid) else " [faint](never ran)[/]"
+        err = " [err]✖[/]" if any(e.kind in A.ERROR_KINDS for e in n.events) else ""
+        return f"[kind.async]{escape(n.init.type)}[/]{name}{where_}{hidden}{ran}{err}"
+
+    def add(parent, n):
+        for e in n.events:
+            parent.add(f"[{kind_style(e.kind)}]{GLYPH.get(e.kind, '·')}[/] {event_text(run, e)}")
+        for c in n.children:
+            add(parent.add(label(c)), c)
+
+    t = Tree(label(root), guide_style="faint")
+    add(t, root)
+    console.print(t)
+    if pruned:
+        console.print(f"[faint]{plural(pruned, 'quiet async resource')} with no observable effect hidden (--full shows all)[/]")

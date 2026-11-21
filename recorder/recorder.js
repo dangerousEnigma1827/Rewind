@@ -110,15 +110,24 @@ if (OUT && !globalThis.__rewind) {
   let reqSeq = 0;
   const http = require('http');
   const origEmit = http.Server.prototype.emit;
+  // Node's HTTPINCOMINGMESSAGE resource is per *connection*: with keep-alive every request on a socket shares
+  // it. So each request gets its own AsyncResource anchor, and the handler plus all req/res event callbacks
+  // (data, end, finish, ...) run in its scope. Everything a request schedules then descends from its anchor.
   http.Server.prototype.emit = function (ev, req, res) {
-    if (ev === 'request' && req && res && !inHook) {
-      const id = ++reqSeq, start = process.hrtime.bigint();
-      // runs inside the HTTPINCOMINGMESSAGE resource: eid is this request's causal anchor
-      guarded(() => emit('http.in', { aid: ah.executionAsyncId(), name: `${req.method} ${req.url}`, data: { req: id, method: req.method, url: req.url } }));
-      res.once('finish', () => guarded(() => emit('http.out', { name: `${res.statusCode} ${req.method} ${req.url}`,
-        data: { req: id, status: res.statusCode, ms: Number(process.hrtime.bigint() - start) / 1e6 } }, res.statusCode >= 500)));
+    if (ev !== 'request' || !req || !res || inHook) return origEmit.apply(this, arguments);
+    const id = ++reqSeq, start = process.hrtime.bigint();
+    const anchor = new ah.AsyncResource('REWIND_REQUEST');
+    for (const em of [req, res]) {
+      const orig = em.emit;
+      em.emit = function () { return anchor.runInAsyncScope(orig, this, ...arguments); };
     }
-    return origEmit.apply(this, arguments);
+    res.once('finish', () => guarded(() => emit('http.out', { name: `${res.statusCode} ${req.method} ${req.url}`,
+      data: { req: id, status: res.statusCode, ms: Number(process.hrtime.bigint() - start) / 1e6 } }, res.statusCode >= 500)));
+    const args = arguments;
+    return anchor.runInAsyncScope(() => {
+      guarded(() => emit('http.in', { aid: anchor.asyncId(), name: `${req.method} ${req.url}`, data: { req: id, method: req.method, url: req.url } }));
+      return origEmit.apply(this, args);
+    });
   };
 
   // ---- errors ------------------------------------------------------------------

@@ -146,3 +146,16 @@ def test_mutation_cap(record):
 def test_esm_not_instrumented_and_unharmed(record):
     r = record("esm_watch.mjs", {"REWIND_WATCH": "currentCart"})
     assert r.code == 0 and "esm ok 1" in r.stdout and not r.kind("mutation")
+
+
+def test_keepalive_requests_get_distinct_anchors(record):
+    r = record("http_keepalive.js")
+    assert r.code == 0
+    ins = r.kind("http.in")
+    assert len(ins) == 3 and len({e["aid"] for e in ins}) == 3
+    anchor_of = {e["aid"]: e["data"]["req"] for e in ins}
+    for i, body in enumerate("abc", start=1):
+        log = next(e for e in r.kind("log") if e["name"] == "done " + body)
+        hits = [anchor_of[x["aid"]] for x in r.chain(log["eid"]) if x["aid"] in anchor_of]
+        assert hits == [i], (body, hits)  # exactly its own request on the ancestry
+    assert all(r.inits()[e["aid"]]["type"] == "REWIND_REQUEST" for e in ins)
