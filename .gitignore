@@ -1,0 +1,6 @@
+.venv/
+.rewind/
+__pycache__/
+*.pyc
+spikes/out/
+spikes/node_modules/

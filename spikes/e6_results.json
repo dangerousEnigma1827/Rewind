@@ -1,0 +1,22 @@
+{
+ "baseline": {
+  "wall_s": 0.6,
+  "events": 0,
+  "mb": 0
+ },
+ "no stacks": {
+  "wall_s": 0.69,
+  "events": 99463,
+  "mb": 9.6
+ },
+ "stacks (no promise)": {
+  "wall_s": 0.66,
+  "events": 99459,
+  "mb": 9.8
+ },
+ "stacks + promise": {
+  "wall_s": 1.12,
+  "events": 99385,
+  "mb": 11.9
+ }
+}

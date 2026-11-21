@@ -1,0 +1,197 @@
+[
+ [
+  "E1 leaf log runs inside stepD's Timeout",
+  true,
+  "types=['Timeout', 'FSREQCALLBACK', 'FSREQCALLBACK', 'FSREQCALLBACK', 'FSREQCALLBACK', 'Timeout']"
+ ],
+ [
+  "E1 user-visible chain Timeout<-FS<-Timeout (internal fs hops collapse)",
+  true,
+  "['Timeout', 'FSREQCALLBACK', 'Timeout']"
+ ],
+ [
+  "E1 creation stacks name scheduling fns stepC/stepB/stepA",
+  true,
+  "[['stepC'], ['Timeout.stepB'], ['stepA']]"
+ ],
+ [
+  "E1 internal fs hops have no user frames",
+  true,
+  "3 internal"
+ ],
+ [
+  "E1 sibling branch not on leaf chain",
+  true,
+  ""
+ ],
+ [
+  "E1 eid == active-stack top for logs",
+  true,
+  ""
+ ],
+ [
+  "E2 e2_timer.js origin=uncaughtException, eid==active top",
+  true,
+  "uncaughtException eid=3 top=3"
+ ],
+ [
+  "E2 e2_timer.js throwing callback's creation site = scheduleIt",
+  true,
+  "['scheduleIt', 'Object.<anonymous>']"
+ ],
+ [
+  "E2 e2_fs.js origin=uncaughtException, eid==active top",
+  true,
+  "uncaughtException eid=5 top=5"
+ ],
+ [
+  "E2 e2_fs.js throwing callback's creation site = scheduleIt",
+  true,
+  "['scheduleIt', 'Object.<anonymous>']"
+ ],
+ [
+  "E2 e2_then.js ps=0 origin=unhandledRejection, top=None, eid is PROMISE",
+  true,
+  "unhandledRejection top=None types=['PROMISE', 'PROMISE', 'Timeout']"
+ ],
+ [
+  "E2 e2_then.js ps=0 chain reaches Timeout cb 'scheduleIt'",
+  true,
+  "['scheduleIt']"
+ ],
+ [
+  "E2 e2_then.js ps=1 origin=unhandledRejection, top=None, eid is PROMISE",
+  true,
+  "unhandledRejection top=None types=['PROMISE', 'PROMISE', 'Timeout']"
+ ],
+ [
+  "E2 e2_then.js ps=1 chain reaches Timeout cb 'scheduleIt'",
+  true,
+  "['scheduleIt']"
+ ],
+ [
+  "E2 e2_then.js promise creation stacks show user fn",
+  true,
+  "['Promise.then', 'Timeout.scheduleIt']"
+ ],
+ [
+  "E2 e2_await.js ps=0 origin=unhandledRejection, top=None, eid is PROMISE",
+  true,
+  "unhandledRejection top=None types=['PROMISE', 'Timeout']"
+ ],
+ [
+  "E2 e2_await.js ps=0 chain reaches Timeout cb 'outer'",
+  true,
+  "['outer']"
+ ],
+ [
+  "E2 e2_await.js ps=1 origin=unhandledRejection, top=None, eid is PROMISE",
+  true,
+  "unhandledRejection top=None types=['PROMISE', 'Timeout']"
+ ],
+ [
+  "E2 e2_await.js ps=1 chain reaches Timeout cb 'outer'",
+  true,
+  "['outer']"
+ ],
+ [
+  "E2 e2_await.js promise creation stacks show user fn",
+  true,
+  "['scheduleIt', 'Timeout.outer']"
+ ],
+ [
+  "E2 e2_await_caught_by_monitor.js ps=0 origin=unhandledRejection, top=None, eid is PROMISE",
+  true,
+  "unhandledRejection top=None types=['PROMISE', 'Timeout']"
+ ],
+ [
+  "E2 e2_await_caught_by_monitor.js ps=0 chain reaches Timeout cb 'root'",
+  true,
+  "['root']"
+ ],
+ [
+  "E2 e2_await_caught_by_monitor.js ps=1 origin=unhandledRejection, top=None, eid is PROMISE",
+  true,
+  "unhandledRejection top=None types=['PROMISE', 'Timeout']"
+ ],
+ [
+  "E2 e2_await_caught_by_monitor.js ps=1 chain reaches Timeout cb 'root'",
+  true,
+  "['root']"
+ ],
+ [
+  "E2 e2_await_caught_by_monitor.js promise creation stacks show user fn",
+  true,
+  "['handler', 'Timeout.root']"
+ ],
+ [
+  "E3 default mode: monitor sees rejection, exit 1",
+  true,
+  "exit=1"
+ ],
+ [
+  "E3 monitor eid chain reaches Timeout cb root",
+  true,
+  "['root']"
+ ],
+ [
+  "E3 WeakMap gives rejected promise aid == default-mode monitor eid",
+  true,
+  "weakmap=3 monitor=3"
+ ],
+ [
+  "E3 (finding) rethrow from handler loses context: eid=0",
+  true,
+  "eid=0"
+ ],
+ [
+  "E3 handler+rethrow preserves exit code",
+  true,
+  "default=1 handler=1"
+ ],
+ [
+  "E3 log after 2 awaits attributed to req1 only",
+  true,
+  "['req1']"
+ ],
+ [
+  "E3 log after 2 awaits attributed to req2 only",
+  true,
+  "['req2']"
+ ],
+ [
+  "E4 no recorder-originated async resources",
+  true,
+  "0 found"
+ ],
+ [
+  "E4 seq contiguous in every file (no lost/dup lines)",
+  true,
+  ""
+ ],
+ [
+  "E5 e5_normal.js run.end flushed",
+  true,
+  "exit=0 n=3002"
+ ],
+ [
+  "E5 e5_exit1.js run.end flushed",
+  true,
+  "exit=1 n=7"
+ ],
+ [
+  "E5 e2_timer.js run.end flushed",
+  true,
+  "exit=1 n=8"
+ ],
+ [
+  "E5 e3_rejection.js run.end flushed",
+  true,
+  "exit=1 n=17"
+ ],
+ [
+  "E5 SIGKILL leaves readable partial file",
+  true,
+  "n=512 (data after last 256-flush lost)"
+ ]
+]
