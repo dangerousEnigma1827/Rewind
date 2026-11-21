@@ -130,8 +130,15 @@ class Run:
         return f"{i.type}{name}{frm}"
 
     def user_chain(self, aid: int) -> list[Event]:
-        """Ancestry with frameless internal hops (fs open/stat/read, bare promises) collapsed."""
-        return [i for i in self.chain(aid) if user_frame(i.stack) or i.aid in self.anchors]
+        """Ancestry with frameless internal hops (fs open/stat/read, bare promises) collapsed,
+        ending at the owning request's anchor when there is one."""
+        out = []
+        for i in self.chain(aid):
+            if i.aid in self.anchors:
+                return out + [i]
+            if user_frame(i.stack):
+                out.append(i)
+        return out
 
     # ---- story -------------------------------------------------------------------
     @cached_property
@@ -209,103 +216,125 @@ def build_tree(run: Run, root: int = 1, full: bool = False) -> tuple[Node, int]:
 
 
 # ---- why -----------------------------------------------------------------------------
-RACE_INFERENCE = ("Shared module-level state is written by one request and read by another while both are "
-                  "in flight: a race between concurrent requests. Keep this state per request.")
+RACE_INFERENCE = ("likely root cause: a race on shared module-level state. Another request overwrote it between this "
+                  "request's own write and its read, so this request computed with another request's data. "
+                  "Fix: keep this state per request instead of in a module-level variable.")
 
 
 @dataclass
 class Investigation:
-    error: Event
+    target: Event
     findings: list[Finding]
     chain: list[Event]
     request: Request | None
-    branch: list[Event]  # story events on the error's causal branch, in order
+    branch: list[Event]  # story events of the target's request (or causal chain), up to the target
 
 
-def investigate(run: Run, error: Event) -> Investigation:
+def _req_label(run: Run, rid: int | None, aid: int) -> str:
+    return f"request {run.requests[rid].label}" if rid else run.describe(aid)
+
+
+def investigate(run: Run, target: Event) -> Investigation:
+    """Explain `target` (an error, or any recorded event). Every statement is a graded Finding."""
     F: list[Finding] = []
-    frame = user_frame(error.stack)
-    origin = (error.data or {}).get("origin")
-    kind = {"uncaughtException": "uncaught exception", "unhandledRejection": "unhandled promise rejection"}.get(origin, "logged error")
-    F.append(Finding(OBSERVED, f"{(error.data or {}).get('error') or 'Error'}: {error.name}  ({kind})", [error.seq]))
-    if frame:
-        F.append(Finding(OBSERVED, f"thrown in {short_fn(frame['fn'])} at {where(frame)}", [error.seq]))
+    is_error = target.kind in ERROR_KINDS
+    frame = user_frame(target.stack) if is_error else None
+    if is_error:
+        origin = (target.data or {}).get("origin")
+        how = {"uncaughtException": "uncaught exception", "unhandledRejection": "unhandled promise rejection"}.get(origin, "logged error")
+        F.append(Finding(OBSERVED, f"{(target.data or {}).get('error') or 'Error'}: {target.name}  ({how})", [target.seq]))
+        if frame:
+            F.append(Finding(OBSERVED, f"thrown in {short_fn(frame['fn'])} at {where(frame)}", [target.seq]))
+    else:
+        F.append(Finding(OBSERVED, f"{target.kind}: {target.name}", [target.seq]))
 
-    ctx = error.eid
+    ctx = target.eid
     chain = run.chain(ctx)
     if chain:
-        head = chain[0]
-        what = "a rejected promise" if head.type == "PROMISE" else f"the callback of {run.describe(ctx)}"
-        F.append(Finding(OBSERVED, f"running inside {what}, created at {where(run.site(ctx))}", [head.seq, error.seq]))
+        what = "a rejected promise" if chain[0].type == "PROMISE" and is_error else f"the callback of {run.describe(ctx)}"
+        F.append(Finding(OBSERVED, f"ran inside {what}, created at {where(run.site(ctx))}", [chain[0].seq, target.seq]))
     hops = run.user_chain(ctx)
     if len(hops) > 1:
-        path = " ← ".join(f"{run.describe(h.aid)} ({where(run.site(h.aid))})" if h.aid not in run.anchors else run.describe(h.aid) for h in hops)
-        F.append(Finding(DERIVED, f"scheduled by: {path}", [h.seq for h in hops]))
+        path = " ← ".join(run.describe(h.aid) if h.aid in run.anchors else f"{run.describe(h.aid)} ({where(run.site(h.aid))})" for h in hops)
+        F.append(Finding(DERIVED, f"causal chain: {path}", [h.seq for h in hops]))
 
     rid = run.request_of(ctx)
     req = run.requests.get(rid) if rid else None
     if req:
-        F.append(Finding(DERIVED, f"belongs to request {req.label} (its async ancestry reaches that request's handler)", [req.inbound.seq]))
+        F.append(Finding(DERIVED, f"belongs to request {req.label}: its async ancestry reaches that request's handler", [req.inbound.seq]))
+        branch = [e for e in run.story if e.seq <= target.seq and run.request_of(e.eid) == rid and e.kind not in ("instrument", "run.start")]
+    else:
+        on_chain = {h.aid for h in chain} | {ctx}
+        branch = [e for e in run.story if e.seq <= target.seq and e.eid in on_chain and e.kind != "instrument"]
 
-    on_chain = {h.aid for h in chain} | {ctx}
-    branch = [e for e in run.story if e.eid in on_chain and e.seq <= error.seq and e.kind not in ("instrument",)]
-    if req:  # whole request branch, not just the direct ancestry
-        branch = [e for e in run.story if e.seq <= error.seq and (run.request_of(e.eid) == rid or e.eid in on_chain)
-                  and e.kind not in ("instrument", "run.start")]
-
-    # concurrency: other requests that ran callbacks while this one was in flight
     overlapping = []
     if req:
         for other in run.requests.values():
             if other.id == rid:
                 continue
-            ran = [e for e in run.events if req.inbound.seq < e.seq < error.seq and e.kind == "async.before" and run.request_of(e.aid) == other.id]
-            if ran:
-                overlapping.append((other, ran))
-        for other, ran in overlapping:
-            F.append(Finding(DERIVED, f"request {other.label} ran {len(ran)} callback(s) while {req.label} was in flight",
-                             [other.inbound.seq, ran[0].seq, ran[-1].seq]))
+            # observable actions only: internal timers (e.g. http's date cache) are real but not informative
+            acts = [e for e in run.story if req.inbound.seq < e.seq < target.seq and not e.kind.startswith("run.")
+                    and run.request_of(e.eid) == other.id]
+            if acts:
+                overlapping.append(other)
+                kinds = ", ".join(sorted({{"http.in": "arrived", "http.out": "responded", "log": "logged", "mutation": "wrote state"}.get(a.kind, a.kind) for a in acts}))
+                F.append(Finding(DERIVED, f"request {other.label} was active while {req.label} was in flight ({kinds})",
+                                 [a.seq for a in acts]))
 
-    F.extend(_shared_state_findings(run, error, frame, req, overlapping))
-    return Investigation(error, F, chain, req, branch)
+    line = run.source_line(frame) if frame else None
+    names_on_line = set(re.findall(r"[A-Za-z_$][\w$]*", line)) if line else set()
+    if run.watch:
+        for name in run.watch:
+            F.extend(_watched_findings(run, target, req, name, line if name in names_on_line else None))
+    elif is_error and line:
+        # Without --watch no mutation may be claimed: only point at module-level names on the failing line.
+        top = _top_level_names(run, frame)
+        suspects = sorted(n for n in names_on_line & top if not _is_function(run, frame, n))
+        if suspects and overlapping:
+            F.append(Finding(DERIVED, f"the failing line uses module-level binding(s) {', '.join('`' + x + '`' for x in suspects)}, "
+                                      f"shared by every request:  {line.strip()}", [target.seq]))
+            F.append(Finding(INFERRED, f"shared state suspected, but writes were not recorded. Re-record with "
+                                       f"`--watch {','.join(suspects)}` to confirm who changed it.", [target.seq]))
+    return Investigation(target, F, chain, req, branch)
 
 
-def _shared_state_findings(run: Run, error: Event, frame, req, overlapping) -> list[Finding]:
+def _watched_findings(run: Run, target: Event, req: Request | None, name: str, failing_line: str | None) -> list[Finding]:
     F: list[Finding] = []
-    line = run.source_line(frame)
-    if not line:
+    writes = [e for e in run.events if e.kind == "mutation" and e.name == name and e.seq < target.seq]
+    if failing_line:
+        F.append(Finding(DERIVED, f"the failing line reads watched variable `{name}`:  {failing_line.strip()}", [target.seq]))
+    if not writes:
+        if failing_line:
+            F.append(Finding(OBSERVED, f"no writes to `{name}` were recorded before this point", []))
         return F
-    names = set(re.findall(r"[A-Za-z_$][\w$]*", line))
-    watched = [w for w in run.watch if w in names]
-    if watched:
-        for name in watched:
-            F.append(Finding(DERIVED, f"the failing line reads watched variable `{name}`:  {line.strip()}", [error.seq]))
-            writes = [e for e in run.events if e.kind == "mutation" and e.name == name and e.seq < error.seq]
-            if not writes:
-                F.append(Finding(OBSERVED, f"no recorded writes to `{name}` before the error", []))
-                continue
-            last = writes[-1]
-            wr = run.request_of(last.eid)
-            who = f"request {run.requests[wr].label}" if wr else run.describe(last.eid)
-            d = last.data or {}
-            F.append(Finding(OBSERVED, f"last write before the error: `{name}{d.get('path', '')}` {d.get('op')} at {d.get('loc')} "
-                                       f"in {run.describe(last.eid)}, value {d.get('after')}", [last.seq]))
-            F.append(Finding(DERIVED, f"that write was made by {who}", [last.seq]))
-            if req and wr and wr != req.id:
-                own = [w for w in writes if run.request_of(w.eid) == req.id]
-                if own:
-                    F.append(Finding(DERIVED, f"{req.label} wrote `{name}` itself at seq {own[-1].seq}; {who} overwrote it at seq "
-                                              f"{last.seq}, before {req.label} read it at seq {error.seq}", [own[-1].seq, last.seq, error.seq]))
-                F.append(Finding(INFERRED, RACE_INFERENCE, [last.seq, error.seq] + ([own[-1].seq] if own else [])))
+    last = writes[-1]
+    d = last.data or {}
+    last_rid = run.request_of(last.eid)
+    if failing_line or (req and last_rid and last_rid != req.id):
+        F.append(Finding(OBSERVED, f"last write to `{name}` before this point: `{name}{d.get('path', '')}` {d.get('op')} at "
+                                   f"{d.get('loc')}, new value {d.get('after')}", [last.seq]))
+        F.append(Finding(DERIVED, f"that write was made by {_req_label(run, last_rid, last.eid)}", [last.seq]))
+    if not req:
         return F
-    # Without --watch we must not claim a mutation. Only point at module-level names on the failing line.
-    top = _top_level_names(run, frame)
-    suspects = sorted(n for n in names & top if not _is_function(run, frame, n))
-    if suspects and overlapping:
-        F.append(Finding(DERIVED, f"the failing line uses module-level binding(s) {', '.join('`'+s+'`' for s in suspects)}, "
-                                  f"shared by every request:  {line.strip()}", [error.seq]))
-        F.append(Finding(INFERRED, f"shared state suspected; writes were not recorded. Re-record with "
-                                   f"`--watch {','.join(suspects)}` to confirm who changed it.", [error.seq]))
+    own = [w for w in writes if run.request_of(w.eid) == req.id]
+    since = own[-1].seq if own else req.inbound.seq
+    foreign = [w for w in writes if w.seq > since and run.request_of(w.eid) not in (None, req.id)]
+    if not foreign:
+        return F
+    by = sorted({run.request_of(w.eid) for w in foreign})
+    who = ", ".join(f"#{b}" for b in by)
+    if own:
+        F.append(Finding(DERIVED, f"{req.label} set `{name}` itself (seq {own[-1].seq}); request {who} overwrote it "
+                                  f"(seq {', '.join(str(w.seq) for w in foreign)}) before this point (seq {target.seq})",
+                         [own[-1].seq, *[w.seq for w in foreign], target.seq]))
+    else:
+        F.append(Finding(DERIVED, f"request {who} wrote `{name}` while {req.label} was in flight", [w.seq for w in foreign]))
+    if failing_line:
+        F.append(Finding(INFERRED, RACE_INFERENCE, [*[w.seq for w in own[-1:]], last.seq, target.seq]))
+    else:
+        F.append(Finding(INFERRED, f"if {req.label} read `{name}` after seq {foreign[-1].seq}, it got request {who}'s data, not its own: "
+                                   f"a likely race between concurrent requests. (Reads are not recorded, so this is not proven.)",
+                         [*[w.seq for w in own[-1:]], foreign[-1].seq, target.seq]))
     return F
 
 

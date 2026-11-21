@@ -125,6 +125,31 @@ def tree(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, '
     render.tree(r, node, pruned, "main module" if root == 1 else r.requests[request].label)
 
 
+@app.command()
+def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
+        error: int = typer.Option(1, "--error", "-e", help="Which error to explain (1 = first)."),
+        seq: Optional[int] = typer.Option(None, "--seq", "-s", help="Explain any event by its seq instead of an error."),
+        evidence: bool = typer.Option(False, "--evidence", help="Show the event seqs backing every finding.")):
+    """Explain an error (or any event): where it ran, what caused it, and what else touched its state."""
+    row, r = _load(run)
+    if seq is not None:
+        if seq not in r.by_seq:
+            render.fail(f"run has no event with seq {seq}"); raise typer.Exit(2)
+        target, position = r.by_seq[seq], f"event seq {seq}"
+    else:
+        if not r.errors:
+            render.header(f"why · {_title(row)}")
+            console.print("  [ok]no errors recorded.[/] [dim]Explain any event with[/] rewind why --seq N")
+            return
+        if not 1 <= error <= len(r.errors):
+            render.fail(f"run has {render.plural(len(r.errors), 'error')}"); raise typer.Exit(2)
+        target, position = r.errors[error - 1], f"error {error} of {len(r.errors)}"
+    render.why(r, analysis.investigate(r, target), _title(row), evidence, position)
+    if not r.watch and seq is None:
+        console.print()
+        console.print("  [faint]tip: record with --watch <variable> to capture writes to shared state[/]")
+
+
 def main():
     app()
 

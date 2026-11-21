@@ -44,3 +44,13 @@ def test_timeline_and_tree_on_demo(tmp_path):
     assert tr.returncode == 0 and "#3 POST /order" in tr.stdout and "loadCart" in tr.stdout and "hidden" in tr.stdout
     bad = rw("timeline", "-r", "9", home=tmp_path)
     assert bad.returncode == 2 and "no request #9" in bad.stdout
+
+
+def test_why_cli(tmp_path):
+    rw("record", "-l", "bad", "-w", "currentCart", "--", "node", "demo/traffic.js", home=tmp_path)
+    w = rw("why", "bad", "--evidence", home=tmp_path)
+    assert w.returncode == 0 and "applyDiscount" in w.stdout and "request #4 overwrote it" in w.stdout and "seq " in w.stdout
+    assert rw("why", "--error", "5", home=tmp_path).returncode == 2
+    rw("record", "-l", "good", "--", "node", "demo/traffic.js", "--sequential", home=tmp_path)
+    g = rw("why", "good", home=tmp_path)
+    assert g.returncode == 0 and "no errors recorded" in g.stdout

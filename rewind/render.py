@@ -173,3 +173,50 @@ def tree(run, root, pruned: int, title: str):
     console.print(t)
     if pruned:
         console.print(f"[faint]{plural(pruned, 'quiet async resource')} with no observable effect hidden (--full shows all)[/]")
+
+
+
+def findings(fs, evidence: bool):
+    for f in fs:
+        ev = f"  [faint]seq {', '.join(map(str, f.evidence))}[/]" if evidence and f.evidence else ""
+        console.print(f"  {LEVEL[f.level]} {escape(f.text)}{ev}", soft_wrap=False)
+
+
+def why(run, inv, title: str, evidence: bool, position: str):
+    e = inv.target
+    header(f"why · {title} · {position}")
+    if e.kind in A.ERROR_KINDS:
+        f = A.user_frame(e.stack)
+        console.print(f"\n  [err]✖ {escape((e.data or {}).get('error') or 'Error')}: {escape(e.name or '')}[/]")
+        if f:
+            console.print(f"    [loc]{escape(A.where(f))}[/] [dim]in[/] [fn]{escape(A.short_fn(f['fn']))}[/]")
+            src = run.source_line(f)
+            if src:
+                console.print(f"    [faint]{f['line']:>4} │[/] {escape(src.strip())}")
+    else:
+        console.print(f"\n  [{kind_style(e.kind)}]{GLYPH.get(e.kind, '·')}[/] {event_text(run, e)}")
+    console.print()
+    step("findings  [dim]([/][ok]●[/] [dim]observed  [/][accent]◆[/] [dim]derived  [/][warn]?[/] [dim]inferred)[/]")
+    findings(inv.findings, evidence)
+    hops = run.user_chain(e.eid)
+    if hops:
+        console.print()
+        step("causal chain  [dim](innermost first)[/]")
+        for i, h in enumerate(hops):
+            arrow = "  " if i == 0 else "[faint]↑ [/]"
+            if h.aid in run.anchors:
+                console.print(f"  {arrow}{req_tag(run.anchors[h.aid])} [kind.http]{escape(run.requests[run.anchors[h.aid]].inbound.name)}[/]")
+            else:
+                site = run.site(h.aid)
+                console.print(f"  {arrow}[kind.async]{escape(h.type)}[/]{' [fn]' + escape(h.name) + '[/]' if h.name and h.name != '<anonymous>' else ''}"
+                              f"  [dim]scheduled in[/] {escape(A.short_fn(site['fn']))} [loc]{escape(A.where(site))}[/]")
+    if inv.branch:
+        console.print()
+        req = inv.request
+        step(f"story of {'request ' + req_tag(req.id) + ' ' + escape(req.inbound.name) if req else 'this causal branch'}"
+             + ("  [dim]+ other requests' writes to watched variables[/]" if run.watch and req else ""))
+        rows = list(inv.branch)
+        if run.watch and req:
+            rows += [m for m in run.events if m.kind == "mutation" and req.inbound.seq < m.seq < e.seq
+                     and run.request_of(m.eid) not in (req.id,) and m.seq not in {r.seq for r in rows}]
+        timeline(run, sorted(rows + ([e] if e not in rows else []), key=lambda x: x.seq), show_context=False)

@@ -67,3 +67,76 @@ def test_short_fn():
     assert A.short_fn("Timeout.paymentConfirmed") == "paymentConfirmed"
     assert A.short_fn("Server.<anonymous>") == "Server.<anonymous>"
     assert A.short_fn(None) == "<anonymous>"
+
+
+# ---- why (M4) ------------------------------------------------------------------------
+def levels(inv, level):
+    return [f.text for f in inv.findings if f.level == level]
+
+
+def assert_evidence_integrity(run, inv):
+    for f in inv.findings:
+        assert all(s in run.by_seq for s in f.evidence), f.text
+        if f.level == A.INFERRED:
+            assert f.evidence, "an inference must cite evidence: " + f.text
+        if "write" in f.text and f.level == A.OBSERVED and "no writes" not in f.text:
+            assert any(run.by_seq[s].kind == "mutation" for s in f.evidence), f.text
+
+
+def test_why_with_watch_proves_the_overwrite(demo):
+    run = demo()
+    inv = A.investigate(run, run.errors[0])
+    assert_evidence_integrity(run, inv)
+    assert inv.request.id == 3
+    obs, der, inf = levels(inv, A.OBSERVED), levels(inv, A.DERIVED), levels(inv, A.INFERRED)
+    assert any("thrown in applyDiscount at demo/checkout.js:23" in t for t in obs)
+    assert any("Timeout paymentConfirmed from chargePayment" in t and "demo/checkout.js:18" in t for t in obs)
+    assert any("C-303" in t and "last write" in t for t in obs)
+    assert any(t == "that write was made by request #4 POST /order" for t in der)
+    assert any("#3 POST /order set `currentCart` itself" in t and "request #4 overwrote it" in t for t in der)
+    assert len(inf) == 1 and "race" in inf[0]
+    # the overwrite really is ordered: own write < foreign write < error
+    own = [e for e in run.events if e.kind == "mutation" and run.request_of(e.eid) == 3][-1]
+    foreign = [e for e in run.events if e.kind == "mutation" and run.request_of(e.eid) == 4][-1]
+    assert own.seq < foreign.seq < run.errors[0].seq
+    assert {run.request_of(e.eid) for e in inv.branch} == {3}
+
+
+def test_why_without_watch_never_claims_a_mutation(demo):
+    run = demo(watch=False)
+    inv = A.investigate(run, run.errors[0])
+    assert_evidence_integrity(run, inv)
+    assert not any("write" in t and "not recorded" not in t for t in levels(inv, A.OBSERVED) + levels(inv, A.DERIVED))
+    assert any("module-level binding(s) `currentCart`" in t for t in levels(inv, A.DERIVED))
+    inf = levels(inv, A.INFERRED)
+    assert len(inf) == 1 and "--watch currentCart" in inf[0] and "suspected" in inf[0]
+
+
+def test_why_on_silent_overcharge_is_hedged(demo):
+    run = demo()
+    log = next(e for e in run.events if e.kind == "log" and "A-101" in e.name)
+    inv = A.investigate(run, log)
+    assert_evidence_integrity(run, inv)
+    assert inv.request.id == 2
+    assert any("request #3 overwrote it" in t for t in levels(inv, A.DERIVED))
+    inf = levels(inv, A.INFERRED)
+    assert len(inf) == 1 and "not proven" in inf[0]
+
+
+def test_sequential_run_has_no_errors_and_no_interference(demo):
+    run = demo(sequential=True)
+    assert not run.errors
+    log = next(e for e in run.events if e.kind == "log" and "A-101" in e.name)
+    assert log.name == "order A-101: charged $128"
+    inv = A.investigate(run, log)
+    assert not levels(inv, A.INFERRED) and not any("overwrote" in t for t in levels(inv, A.DERIVED))
+
+
+def test_why_on_rejection_through_await(record, rewind_home):
+    run = load(record, rewind_home, "reject_await.js")
+    inv = A.investigate(run, run.errors[0])
+    assert_evidence_integrity(run, inv)
+    obs = levels(inv, A.OBSERVED)
+    assert any("unhandled promise rejection" in t for t in obs)
+    assert any("a rejected promise" in t for t in obs)
+    assert inv.request is None and not levels(inv, A.INFERRED)
