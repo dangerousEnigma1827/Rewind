@@ -178,7 +178,8 @@ def tree(run, root, pruned: int, title: str):
 
 def findings(fs, evidence: bool):
     for f in fs:
-        ev = f"  [faint]seq {', '.join(map(str, f.evidence))}[/]" if evidence and f.evidence else ""
+        side = f"{f.run} " if f.run else ""
+        ev = f"  [faint]{side}seq {', '.join(map(str, f.evidence))}[/]" if evidence and f.evidence else ""
         console.print(f"  {LEVEL[f.level]} {escape(f.text)}{ev}", soft_wrap=False)
 
 
@@ -220,3 +221,41 @@ def why(run, inv, title: str, evidence: bool, position: str):
             rows += [m for m in run.events if m.kind == "mutation" and req.inbound.seq < m.seq < e.seq
                      and run.request_of(m.eid) not in (req.id,) and m.seq not in {r.seq for r in rows}]
         timeline(run, sorted(rows + ([e] if e not in rows else []), key=lambda x: x.seq), show_context=False)
+
+
+
+def _diff_line(mark: str, style: str, tok: str, seq: int | None):
+    seq_s = f"{seq:>5}" if seq is not None else "     "
+    console.print(f"  [{style}]{mark}[/] [faint]{seq_s}[/]  [{style if mark != ' ' else 'dim'}]{escape(tok)}[/]", soft_wrap=False,
+                  overflow="ellipsis", no_wrap=True)
+
+
+def diff(res, title_a: str, title_b: str, evidence: bool, context: int = 2):
+    header(f"diff · A = {title_a}  ·  B = {title_b}")
+    console.print()
+    step("findings  [dim]([/][ok]●[/] [dim]observed  [/][accent]◆[/] [dim]derived  [/][warn]?[/] [dim]inferred)[/]")
+    findings(res.findings, evidence)
+    console.print()
+    step("aligned steps  [dim](seq is from A, or B for + lines; ids and timings normalised away)[/]")
+    first = res.first_divergence
+    for n, (tag, i1, i2, j1, j2) in enumerate(res.opcodes):
+        if tag == "equal":
+            rows = list(range(i1, i2))
+            head = rows[:context] if n else []
+            tail = rows[-context:] if n < len(res.opcodes) - 1 else []
+            if len(rows) > len(head) + len(tail):
+                for k in head:
+                    _diff_line(" ", "dim", res.a[k][0], res.a[k][1].seq)
+                console.print(f"  [faint]  ·····  {len(rows) - len(head) - len(tail)} identical steps[/]")
+                for k in tail:
+                    _diff_line(" ", "dim", res.a[k][0], res.a[k][1].seq)
+            else:
+                for k in rows:
+                    _diff_line(" ", "dim", res.a[k][0], res.a[k][1].seq)
+            continue
+        if (tag, i1, i2, j1, j2) == first:
+            console.print("  [warn]  ▼ first divergence[/]")
+        for k in range(i1, i2):
+            _diff_line("-", "red", res.a[k][0], res.a[k][1].seq)
+        for k in range(j1, j2):
+            _diff_line("+", "green", res.b[k][0], res.b[k][1].seq)

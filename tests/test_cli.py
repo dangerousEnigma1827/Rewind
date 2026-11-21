@@ -54,3 +54,11 @@ def test_why_cli(tmp_path):
     rw("record", "-l", "good", "--", "node", "demo/traffic.js", "--sequential", home=tmp_path)
     g = rw("why", "good", home=tmp_path)
     assert g.returncode == 0 and "no errors recorded" in g.stdout
+
+
+def test_diff_cli(tmp_path):
+    rw("record", "-l", "good", "--", "node", "demo/traffic.js", "--sequential", home=tmp_path)
+    rw("record", "-l", "bad", "--", "node", "demo/traffic.js", home=tmp_path)
+    d = rw("diff", "good", "bad", home=tmp_path)
+    assert d.returncode == 0 and "first divergence" in d.stdout and "#3 http.in POST /order" in d.stdout
+    assert rw("diff", "good", "nope", home=tmp_path).returncode == 2

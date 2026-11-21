@@ -45,6 +45,7 @@ class Finding:
     level: str
     text: str
     evidence: list[int] = field(default_factory=list)  # backing event seqs
+    run: str | None = None  # diff findings: which run ("A"/"B") the seqs belong to
 
 
 @dataclass
@@ -148,6 +149,19 @@ class Run:
     @cached_property
     def errors(self) -> list[Event]:
         return [e for e in self.events if e.kind in ERROR_KINDS]
+
+    @cached_property
+    def effectful(self) -> set[int]:
+        """aids whose own callback or descendants emitted a story event (DERIVED)."""
+        out: set[int] = set()
+        for e in self.story:
+            if e.kind in ("run.start", "instrument"):
+                continue
+            for i in self.chain(e.eid):
+                if i.aid in out:
+                    break
+                out.add(i.aid)
+        return out
 
     def callback_fires(self) -> list[Event]:
         """async.before events of resources created from user code: 'your callback ran here'."""
@@ -365,20 +379,23 @@ def _is_function(run: Run, frame, name: str) -> bool:
 
 
 # ---- diff ------------------------------------------------------------------------------
-def tokens(run: Run) -> list[tuple[str, Event]]:
-    """Run -> comparable tokens with ids and timings normalised away."""
+def tokens(run: Run, everything: bool = False) -> list[tuple[str, Event]]:
+    """Run -> comparable tokens with ids and timings normalised away. By default callbacks that belong to no
+    request (test harness, process plumbing) are left out so the diff is about the application."""
     out = []
     for e in sorted(run.story + run.callback_fires(), key=lambda e: e.seq):
         rid = run.request_of(e.eid if e.kind != "async.before" else e.aid)
         tag = f"#{rid} " if rid else ""
         if e.kind == "async.before":
-            out.append((f"{tag}▸ {run.describe(e.aid)} @ {where(run.site(e.aid))}", e))
+            # only callbacks with an observable effect: internal timers (http date cache) fire nondeterministically
+            if everything or (rid and e.aid in run.effectful):
+                out.append((f"{tag}▸ {run.describe(e.aid)} @ {where(run.site(e.aid))}", e))
         elif e.kind == "mutation":
             d = e.data or {}
             out.append((f"{tag}✎ {e.name}{d.get('path', '')} {d.get('op')} @ {d.get('loc')}", e))
         elif e.kind in ("http.in", "http.out", "log", "error.uncaught", "error.logged", "run.end"):
             label = e.name if e.kind != "run.end" else f"exit {(e.data or {}).get('code')}"
-            out.append((f"{tag}{e.kind} {label}", e))
+            out.append((f"{tag if e.kind != 'run.end' else ''}{e.kind} {label}", e))
     return out
 
 
@@ -394,34 +411,46 @@ class DiffResult:
         return next((op for op in self.opcodes if op[0] != "equal"), None)
 
 
-def diff(a: Run, b: Run) -> DiffResult:
+def diff(a: Run, b: Run, everything: bool = False) -> DiffResult:
     import difflib
-    ta, tb = tokens(a), tokens(b)
+    from collections import Counter
+    ta, tb = tokens(a, everything), tokens(b, everything)
     sm = difflib.SequenceMatcher(a=[t for t, _ in ta], b=[t for t, _ in tb], autojunk=False)
     ops = sm.get_opcodes()
     F: list[Finding] = []
     same = sum(i2 - i1 for tag, i1, i2, _, _ in ops if tag == "equal")
-    F.append(Finding(DERIVED, f"{same} of {len(ta)} / {len(tb)} normalised steps match", []))
+    F.append(Finding(DERIVED, f"{same} of {len(ta)} (A) / {len(tb)} (B) normalised steps line up", []))
     first = next((op for op in ops if op[0] != "equal"), None)
     if first is None:
         F.append(Finding(DERIVED, "no divergence: both runs took the same observable path", []))
         return DiffResult(ta, tb, ops, F)
-    tag, i1, i2, j1, j2 = first
-    before = ta[i1 - 1][0] if i1 else "start"
-    F.append(Finding(DERIVED, f"runs diverge after: {before}", [ta[i1 - 1][1].seq] if i1 else []))
-    if j1 < len(tb):
-        F.append(Finding(OBSERVED, f"B does instead: {tb[j1][0]}", [tb[j1][1].seq]))
+    _, i1, i2, j1, j2 = first
+    if i1:
+        F.append(Finding(DERIVED, f"identical up to and including: {ta[i1 - 1][0]}", [ta[i1 - 1][1].seq], "A"))
     if i1 < len(ta):
-        F.append(Finding(OBSERVED, f"where A did: {ta[i1][0]}", [ta[i1][1].seq]))
-    # ordering inversions of matching steps = interleaving changed
-    pos_a = {t: i for i, (t, _) in enumerate(ta)}
-    moved = [t for t, _ in tb if t in pos_a]
-    inversions = sum(1 for x, y in zip(moved, moved[1:]) if pos_a[x] > pos_a[y])
-    if inversions:
-        F.append(Finding(DERIVED, f"{inversions} step(s) common to both runs happen in a different order: the interleaving changed", []))
+        F.append(Finding(OBSERVED, f"next, A does: {ta[i1][0]}", [ta[i1][1].seq], "A"))
+    if j1 < len(tb):
+        F.append(Finding(OBSERVED, f"next, B does: {tb[j1][0]}", [tb[j1][1].seq], "B"))
+    a_only = Counter(t for tag, x1, x2, _, _ in ops if tag != "equal" for t, _ in ta[x1:x2])
+    b_only = Counter(t for tag, _, _, y1, y2 in ops if tag != "equal" for t, _ in tb[y1:y2])
+    moved = a_only & b_only
+    later = next((k for k in range(i1, len(ta)) if j1 < len(tb) and ta[k][0] == tb[j1][0]), None)
+    if later is not None:
+        F.append(Finding(DERIVED, f"that step also happens in A, but {later - i1} step(s) later: the interleaving changed, "
+                                  f"not the code path", [ta[later][1].seq], "A"))
+    if moved:
+        F.append(Finding(DERIVED, f"{sum(moved.values())} step(s) occur in both runs at different positions (reordered)", []))
+    gone, new = a_only - b_only, b_only - a_only
+    if gone:
+        F.append(Finding(DERIVED, f"{sum(gone.values())} step(s) only in A, e.g. {next(iter(gone))}",
+                         [next(e.seq for t, e in ta if t == next(iter(gone)))], "A"))
+    if new:
+        F.append(Finding(DERIVED, f"{sum(new.values())} step(s) only in B, e.g. {next(iter(new))}",
+                         [next(e.seq for t, e in tb if t == next(iter(new)))], "B"))
     ea, eb = a.errors, b.errors
     if bool(ea) != bool(eb):
-        bad, good = ("A", "B") if ea else ("B", "A")
-        F.append(Finding(INFERRED, f"run {bad} fails and {good} does not; the first divergence above is the earliest "
-                                   f"observable point where their executions part ways, so start investigating there.", []))
+        bad, good, err = ("A", "B", ea[0]) if ea else ("B", "A", eb[0])
+        F.append(Finding(INFERRED, f"run {bad} fails and {good} does not. The first divergence above is the earliest observable "
+                                   f"point where they part ways; it is the place to start, not necessarily the cause. "
+                                   f"Run `rewind why` on {bad} for the causal story.", [err.seq], bad))
     return DiffResult(ta, tb, ops, F)

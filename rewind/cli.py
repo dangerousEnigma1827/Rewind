@@ -150,6 +150,17 @@ def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'l
         console.print("  [faint]tip: record with --watch <variable> to capture writes to shared state[/]")
 
 
+@app.command()
+def diff(a: str = typer.Argument(..., help="Baseline run (e.g. good)."),
+         b: str = typer.Argument(..., help="Run to compare (e.g. bad)."),
+         all_: bool = typer.Option(False, "--all", help="Include callbacks outside any request (harness, plumbing)."),
+         evidence: bool = typer.Option(False, "--evidence", help="Show the event seqs backing every finding.")):
+    """Compare two runs: where did their executions part ways?"""
+    ra, A_ = _load(a)
+    rb, B_ = _load(b)
+    render.diff(analysis.diff(A_, B_, all_), _title(ra), _title(rb), evidence)
+
+
 def main():
     app()
 

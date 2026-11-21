@@ -140,3 +140,31 @@ def test_why_on_rejection_through_await(record, rewind_home):
     assert any("unhandled promise rejection" in t for t in obs)
     assert any("a rejected promise" in t for t in obs)
     assert inv.request is None and not levels(inv, A.INFERRED)
+
+
+# ---- diff (M5) -----------------------------------------------------------------------
+def test_diff_of_two_good_runs_has_no_divergence(demo):
+    a, b = demo(sequential=True), demo(sequential=True)
+    res = A.diff(a, b)
+    assert res.first_divergence is None
+    assert any("no divergence" in f.text for f in res.findings)
+
+
+def test_diff_good_vs_bad_points_at_the_interleaving(demo):
+    good, bad = demo(sequential=True), demo()
+    res = A.diff(good, bad)
+    tag, i1, i2, j1, j2 = res.first_divergence
+    assert res.a[i1 - 1][0] == "#2 ✎ currentCart = @ demo/checkout.js:12:5"       # last common step
+    assert res.a[i1][0].startswith("#2 ▸ Timeout paymentConfirmed")               # good: #2 finishes
+    assert res.b[j1][0] == "#3 http.in POST /order"                                # bad: #3 arrives first
+    texts = [f.text for f in res.findings]
+    assert any("interleaving changed" in t for t in texts)
+    assert any("charged $128" in t for t in texts) and any("charged $161" in t for t in texts)
+    inf = [f for f in res.findings if f.level == A.INFERRED]
+    assert len(inf) == 1 and inf[0].run == "B" and bad.by_seq[inf[0].evidence[0]].kind == "error.uncaught"
+    for f in res.findings:  # evidence seqs resolve in the run they name
+        side = good if f.run == "A" else bad
+        assert all(s in side.by_seq for s in f.evidence)
+    # harness callbacks are out of scope by default, present with everything=True
+    assert all(t.startswith(("#", "run.end", "log", "error")) for t, _ in res.a + res.b)
+    assert len(A.tokens(bad, everything=True)) > len(res.b)
