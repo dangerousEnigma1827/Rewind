@@ -379,7 +379,7 @@ def _is_function(run: Run, frame, name: str) -> bool:
 
 
 # ---- diff ------------------------------------------------------------------------------
-def tokens(run: Run, everything: bool = False) -> list[tuple[str, Event]]:
+def tokens(run: Run, everything: bool = False, watched: set[str] | None = None) -> list[tuple[str, Event]]:
     """Run -> comparable tokens with ids and timings normalised away. By default callbacks that belong to no
     request (test harness, process plumbing) are left out so the diff is about the application."""
     out = []
@@ -391,6 +391,8 @@ def tokens(run: Run, everything: bool = False) -> list[tuple[str, Event]]:
             if everything or (rid and e.aid in run.effectful):
                 out.append((f"{tag}▸ {run.describe(e.aid)} @ {where(run.site(e.aid))}", e))
         elif e.kind == "mutation":
+            if watched is not None and e.name not in watched:
+                continue
             d = e.data or {}
             out.append((f"{tag}✎ {e.name}{d.get('path', '')} {d.get('op')} @ {d.get('loc')}", e))
         elif e.kind in ("http.in", "http.out", "log", "error.uncaught", "error.logged", "run.end"):
@@ -414,10 +416,16 @@ class DiffResult:
 def diff(a: Run, b: Run, everything: bool = False) -> DiffResult:
     import difflib
     from collections import Counter
-    ta, tb = tokens(a, everything), tokens(b, everything)
+    # writes are only comparable for variables watched in both runs
+    common = set(a.watch) & set(b.watch)
+    ta, tb = tokens(a, everything, common), tokens(b, everything, common)
     sm = difflib.SequenceMatcher(a=[t for t, _ in ta], b=[t for t, _ in tb], autojunk=False)
     ops = sm.get_opcodes()
     F: list[Finding] = []
+    only = sorted(set(a.watch) ^ set(b.watch))
+    if only:
+        F.append(Finding(DERIVED, f"writes to {', '.join('`' + v + '`' for v in only)} left out: watched in only one run "
+                                  f"(record both with the same --watch to compare them)", []))
     same = sum(i2 - i1 for tag, i1, i2, _, _ in ops if tag == "equal")
     F.append(Finding(DERIVED, f"{same} of {len(ta)} (A) / {len(tb)} (B) normalised steps line up", []))
     first = next((op for op in ops if op[0] != "equal"), None)

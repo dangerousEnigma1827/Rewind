@@ -162,7 +162,16 @@ def diff(a: str = typer.Argument(..., help="Baseline run (e.g. good)."),
 
 
 def main():
-    app()
+    try:
+        app()
+    except (BrokenPipeError, OSError) as e:  # reader closed the pipe (e.g. `| head`); Windows reports EINVAL
+        if isinstance(e, BrokenPipeError) or e.errno == 22:
+            try:
+                sys.stdout = open(os.devnull, "w")
+            except OSError:
+                pass
+            raise SystemExit(0)
+        raise
 
 
 if __name__ == "__main__":

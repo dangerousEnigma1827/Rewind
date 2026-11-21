@@ -3,7 +3,7 @@ import os, subprocess, sys
 from pathlib import Path
 from conftest import ROOT
 
-REWIND = [sys.executable, "-m", "rewind.cli"]
+REWIND = [sys.executable, "-c", "from rewind.cli import main; main()"]
 
 
 def rw(*args, home):
@@ -62,3 +62,11 @@ def test_diff_cli(tmp_path):
     d = rw("diff", "good", "bad", home=tmp_path)
     assert d.returncode == 0 and "first divergence" in d.stdout and "#3 http.in POST /order" in d.stdout
     assert rw("diff", "good", "nope", home=tmp_path).returncode == 2
+
+
+def test_diff_ignores_writes_watched_in_only_one_run(tmp_path):
+    rw("record", "-l", "good", "--", "node", "demo/traffic.js", "--sequential", home=tmp_path)
+    rw("record", "-l", "bad", "-w", "currentCart", "--", "node", "demo/traffic.js", home=tmp_path)
+    d = rw("diff", "good", "bad", home=tmp_path)
+    assert "watched in only one run" in d.stdout
+    assert "next, B does: #3 http.in POST /order" in d.stdout  # same divergence as with matching --watch

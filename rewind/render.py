@@ -58,7 +58,7 @@ def runs_table(rows):
     t = Table(box=None, expand=True, header_style="dim", pad_edge=False, padding=(0, 2))
     for c in ("run", "label", "status", "events", "errors", "exit", "when", "command"):
         t.add_column(c, justify="right" if c in ("events", "errors", "exit") else "left",
-                     no_wrap=c != "command", overflow="ellipsis", ratio=1 if c == "command" else None)
+                     no_wrap=True, overflow="ellipsis", ratio=1 if c == "command" else None)
     for r in rows:
         cmd = " ".join(json.loads(r["cmd"]) or []) if r["cmd"] else ""
         t.add_row(f"[id]{r['id']}[/]", r["label"] or "[faint]-[/]", STATUS.get(r["status"], r["status"]),
