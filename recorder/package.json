@@ -1,0 +1,12 @@
+{
+  "name": "rewind-recorder",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Rewind Node.js execution recorder (preload with --require). Dependencies are only loaded when --watch is used.",
+  "main": "recorder.js",
+  "dependencies": {
+    "acorn": "8.19.0",
+    "acorn-walk": "8.3.5",
+    "magic-string": "1.4.5"
+  }
+}

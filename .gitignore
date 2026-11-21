@@ -3,4 +3,4 @@
 __pycache__/
 *.pyc
 spikes/out/
-spikes/node_modules/
+node_modules/
