@@ -12,8 +12,8 @@ def read_events(path: Path):
 
 
 class Run:
-    def __init__(self, code, events, stdout, stderr):
-        self.code, self.events, self.stdout, self.stderr = code, events, stdout, stderr
+    def __init__(self, code, events, stdout, stderr, path=None):
+        self.code, self.events, self.stdout, self.stderr, self.path = code, events, stdout, stderr, path
 
     def kind(self, k):
         return [e for e in self.events if e["kind"] == k]
@@ -46,5 +46,12 @@ def record(tmp_path):
                 time.sleep(0.05)
             p.kill()
         so, se = p.communicate(timeout=30)
-        return Run(p.returncode, read_events(out) if out.exists() else [], so, se)
+        return Run(p.returncode, read_events(out) if out.exists() else [], so, se, out)
     return _record
+
+
+@pytest.fixture
+def rewind_home(tmp_path, monkeypatch):
+    h = tmp_path / "home"
+    monkeypatch.setenv("REWIND_HOME", str(h))
+    return h
