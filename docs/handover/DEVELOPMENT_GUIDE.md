@@ -1,0 +1,135 @@
+# Development guide
+
+Back to [HANDOVER.md](HANDOVER.md). Commands here are written from the source and README; they were **not executed** while writing this guide. The M7 fresh-clone run is what verifies them.
+
+## Repository structure
+
+```
+rewind/                     repo root
+├─ recorder/
+│  ├─ recorder.js           Node recorder, preloaded with --require (zero deps)
+│  ├─ instrument.js         --watch AST rewriter (acorn, acorn-walk, magic-string; lazy)
+│  ├─ package.json          pins acorn 8.19.0, acorn-walk 8.3.5, magic-string 1.4.5
+│  └─ package-lock.json
+├─ rewind/                  Python package (installed editable)
+│  ├─ __init__.py           RECORDER path
+│  ├─ cli.py                Typer commands: record runs timeline tree why diff
+│  ├─ store.py              REWIND_HOME, SQLite schema, ingest, resolve
+│  ├─ analysis.py           Run indexes, tree, investigate (why), diff
+│  └─ render.py             Rich theme and views
+├─ demo/
+│  ├─ checkout.js           Phantom Discount service (bug: module-level currentCart)
+│  ├─ traffic.js            starts it, sends /health + 3 orders; --sequential
+│  ├─ prices.json           SKU prices
+│  └─ fix.patch             per-request cart fix (git apply)
+├─ tests/
+│  ├─ conftest.py           record / rewind_home fixtures
+│  ├─ fixtures/*.js|.mjs    small Node programs with known causality
+│  └─ test_{recorder,store,analysis,cli}.py
+├─ spikes/                  M0 experiments + RESULTS.md (evidence, not shipped)
+├─ docs/ARCHITECTURE.md     concise architecture
+├─ docs/handover/           this handover set
+├─ pyproject.toml           typer>=0.12, rich>=13; dev: pytest>=8; script `rewind`
+├─ .gitignore               .venv/ .rewind/ __pycache__/ *.pyc spikes/out/ node_modules/ *.egg-info/
+└─ README.md
+```
+
+`node_modules/` and `.rewind/` are gitignored, so a fresh clone needs `npm install --prefix recorder` before `--watch` works.
+
+## Prerequisites
+
+- Node.js ≥ 20 on PATH (developed on v24.22.1).
+- Python ≥ 3.12 (`pyproject.toml`); developed on 3.15.2, 3.14.10 reported working.
+- Git. npm (ships with Node). No C compiler needed (no native modules).
+
+## Installation on Windows
+
+PowerShell 5.1 (the default shell on the dev machine — note: no `&&`):
+
+```powershell
+git clone <repo-url> rewind
+cd rewind
+python -m venv .venv            # or: py -3.14 -m venv .venv
+.venv\Scripts\Activate.ps1      # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+pip install -e ".[dev]"
+npm install --prefix recorder   # only needed for --watch
+```
+
+Git Bash equivalent:
+
+```sh
+python -m venv .venv && source .venv/Scripts/activate
+pip install -e ".[dev]"
+npm install --prefix recorder
+```
+
+The README currently shows `python -m venv .venv && .venv/Scripts/activate`, which is suspected not to work in PowerShell 5.1 (see [PROJECT_STATUS.md](PROJECT_STATUS.md)); the README has not been changed by this handover.
+
+## Running Rewind
+
+```powershell
+rewind --help
+rewind record --label myrun -- node path\to\app.js arg1
+rewind record -w cart,cache -- node app.js     # track writes to top-level CJS vars
+rewind runs
+rewind timeline myrun -k log,http,error
+rewind tree myrun -r 2
+rewind why myrun --evidence
+rewind diff good bad
+```
+
+Data goes to `$REWIND_HOME` (default `.\.rewind` in the current directory): `rewind.db` plus raw `runs\<id>.ndjson`. Delete the folder to start fresh.
+
+## The Phantom Discount demo
+
+`demo/traffic.js` starts `demo/checkout.js` on an ephemeral port, sends a `/health` warm-up, then three orders A-101, B-202, C-303 at 0/40/100 ms with payment delays 80/150/10 ms (≥40 ms margins chosen for a deterministic interleaving). `--sequential` (or `DEMO_SEQUENTIAL=1`) sends them one at a time. The bug: `currentCart` (checkout.js:6) is shared; each order's `loadCart` overwrites it (line 12) and `applyDiscount` reads it after the `paymentConfirmed` timer (line 18) at line 23.
+
+Walkthrough, from the repo root (expected outputs are as **claimed by README**, not re-verified):
+
+```powershell
+node demo/traffic.js                                       # TypeError reading 'price' at checkout.js:23
+rewind record -l bad -w currentCart -- node demo/traffic.js
+rewind timeline bad                                        # 3 interleaved orders, 3 writes; "A-101: charged $161" (should be $128)
+rewind why bad                                             # thrown in applyDiscount; request #3 (B-202); overwritten by #4
+rewind why bad --seq <seq of the A-101 log line>           # silent overcharge; race marked not proven
+rewind record -l nowatch -- node demo/traffic.js
+rewind why nowatch                                         # suspects shared state, recommends --watch
+rewind record -l good -- node demo/traffic.js --sequential
+rewind diff good bad                                       # identical up to #2's write, then interleaving differs
+git apply demo/fix.patch                                   # ONLY in a scratch clone
+rewind record -l fixed -- node demo/traffic.js
+rewind why fixed                                           # no errors
+git apply -R demo/fix.patch                                # undo
+```
+
+Request numbering: #1 is the `/health` check, so orders are #2–#4.
+
+## Running tests
+
+```powershell
+pytest                   # full suite; spawns real node processes
+pytest --collect-only -q # count items
+pytest tests/test_recorder.py -k keepalive
+```
+
+Run from the repo root with the venv active and `node` on PATH. Tests set their own `REWIND_HOME` in temp dirs. `--watch` tests need `recorder/node_modules`.
+
+M0 spikes (evidence only): `.venv\Scripts\python spikes\check.py`, `spikes\e5_sqlite.py`, `spikes\e6_bench.py` (spikes have their own `spikes/package.json`).
+
+## Environment variables
+
+| var | set by | default | meaning |
+|---|---|---|---|
+| `REWIND_HOME` | user | `./.rewind` | database and raw recordings |
+| `REWIND_PROMISE_STACKS` | user | `1` | `0` skips promise creation stacks (~1.9× → 1.1× overhead; loses async fn names) |
+| `REWIND_MUT_CAP` | user | `10000` | recorded writes per watched variable |
+| `REWIND_OUT` | `rewind record` | — | NDJSON output path; recorder is inert without it |
+| `REWIND_RUN_ID` | `rewind record` | — | run id written into `run.start` |
+| `REWIND_WATCH` | `rewind record -w` | — | comma list of watched names |
+| `DEMO_SEQUENTIAL` | user | — | `1` = same as `traffic.js --sequential` |
+
+## Conventions
+
+- One commit per completed milestone, tests green first; no `Co-Authored-By` trailer.
+- Analysis findings must carry an evidence level and cite seqs; never claim an unrecorded write.
+- Storage never drops events; views filter.
