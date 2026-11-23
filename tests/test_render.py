@@ -1,5 +1,5 @@
 """Presentation: landing screen, help/errors, colour handling, narrow terminals, palette, evidence hierarchy."""
-import io, re
+import io, os, re
 from rich.console import Console
 
 from rewind import analysis as A, render
@@ -87,6 +87,16 @@ def test_palette_reads_on_dark_and_light_backgrounds():
         L = lum(hex_)
         on_black, on_white = (L + 0.05) / 0.05, 1.05 / (L + 0.05)
         assert min(on_black, on_white) >= 3.5, (name, round(on_black, 2), round(on_white, 2))
+
+
+def test_console_font_fallback_is_complete_and_keeps_layout():
+    from rich.cells import cell_len
+    assert all(cell_len(a) == cell_len(b) == 1 for a, b in render.FALLBACK.items())
+    if os.name == "nt":  # the stand-ins really exist in the fonts a classic console uses; the originals don't in Lucida
+        for face in ("Lucida Console", "Consolas", "Cascadia Mono"):
+            assert render._font_has(face, "".join(render.FALLBACK.values())), face
+        assert not render._font_has("Lucida Console", "●◆")
+    assert render._GlyphSafe("stdout")._table == str.maketrans(render.FALLBACK)
 
 
 def test_certainty_is_brightness(monkeypatch):

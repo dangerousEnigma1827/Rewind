@@ -12,6 +12,8 @@ carry the structure.
 from __future__ import annotations
 
 import json
+import os
+import sys
 from contextlib import nullcontext
 from datetime import datetime
 
@@ -37,8 +39,70 @@ THEME = Theme({
     "kind.log": "none", "kind.http": "none", "kind.error": f"bold {P['err']}", "kind.mutation": P["write"],
     "kind.async": P["mute"], "kind.run": P["uv"],
 })
-console = Console(theme=THEME, highlight=False)
-err_console = Console(theme=THEME, highlight=False, stderr=True)
+# Classic Windows consoles (conhost) can't fall back to another font, so a glyph missing from the console font
+# prints as a box. Lucida Console (PowerShell 5.1's default) lacks ● ◆ ✖ ✎ ▸ ◉ ⚙ ◂ ┈ ┃ ◌; these one-cell
+# stand-ins exist in Lucida Console, Consolas and Cascadia Mono (tests/test_render.py checks via GDI).
+FALLBACK = {"◂": "◄", "●": "•", "◆": "♦", "✖": "×", "✎": "=", "▸": "►", "◉": "○", "⚙": "*", "┈": "·", "┃": "║", "◌": "○"}
+
+
+def _font_has(face: str, glyphs: str) -> bool:
+    import ctypes
+    from ctypes import wintypes
+    gdi, user = ctypes.windll.gdi32, ctypes.windll.user32
+    gdi.CreateFontW.restype, user.GetDC.restype = wintypes.HFONT, wintypes.HDC
+    gdi.SelectObject.argtypes, gdi.SelectObject.restype = [wintypes.HDC, wintypes.HGDIOBJ], wintypes.HGDIOBJ
+    gdi.DeleteObject.argtypes, user.ReleaseDC.argtypes = [wintypes.HGDIOBJ], [wintypes.HWND, wintypes.HDC]
+    gdi.GetGlyphIndicesW.argtypes = [wintypes.HDC, wintypes.LPCWSTR, ctypes.c_int, ctypes.POINTER(wintypes.WORD), wintypes.DWORD]
+    hdc = user.GetDC(None)
+    font = gdi.CreateFontW(16, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 0, 0, face)
+    old = gdi.SelectObject(hdc, font)
+    idx = (wintypes.WORD * len(glyphs))()
+    gdi.GetGlyphIndicesW(hdc, glyphs, len(glyphs), idx, 1)  # GGI_MARK_NONEXISTING_GLYPHS: missing -> 0xFFFF
+    gdi.SelectObject(hdc, old); gdi.DeleteObject(font); user.ReleaseDC(None, hdc)
+    return all(i != 0xFFFF for i in idx)
+
+
+def _console_font_lacks_glyphs(std_handle: int) -> bool:
+    if os.name != "nt" or os.environ.get("WT_SESSION") or os.environ.get("TERM_PROGRAM"):
+        return False  # not Windows, or Windows Terminal / VS Code, which do font fallback
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class FontInfo(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.ULONG), ("nFont", wintypes.DWORD), ("dwFontSize", wintypes._COORD),
+                        ("FontFamily", wintypes.UINT), ("FontWeight", wintypes.UINT), ("FaceName", wintypes.WCHAR * 32)]
+        k32 = ctypes.windll.kernel32
+        k32.GetStdHandle.restype = wintypes.HANDLE
+        info = FontInfo(cbSize=ctypes.sizeof(FontInfo))
+        if not k32.GetCurrentConsoleFontEx(k32.GetStdHandle(std_handle), False, ctypes.byref(info)):
+            return False  # not a console: pipe or file, written as-is
+        return not _font_has(info.FaceName, "".join(FALLBACK))
+    except Exception:
+        return False
+
+
+class _GlyphSafe:
+    """Writes through to the live sys stream, swapping glyphs the console font lacks for its stand-ins."""
+    _table = str.maketrans(FALLBACK)
+
+    def __init__(self, name: str):
+        self._name = name
+
+    def write(self, s: str):
+        return getattr(sys, self._name).write(s.translate(self._table))
+
+    def __getattr__(self, attr):
+        return getattr(getattr(sys, self._name), attr)
+
+
+def _make_console(stderr: bool) -> Console:
+    safe = _console_font_lacks_glyphs(-12 if stderr else -11)
+    return Console(theme=THEME, highlight=False, stderr=stderr, file=_GlyphSafe("stderr" if stderr else "stdout") if safe else None)
+
+
+console = _make_console(stderr=False)
+err_console = _make_console(stderr=True)
 
 MARK = "[uv.b]◂◂[/]"
 LEGEND = "[obs]●[/] [mute]observed[/]  [uv]◆[/] [mute]derived[/]  [hyp]? inferred[/]"
