@@ -6,8 +6,8 @@ from conftest import ROOT
 REWIND = [sys.executable, "-c", "from rewind.cli import main; main()"]
 
 
-def rw(*args, home):
-    env = {**os.environ, "REWIND_HOME": str(home), "COLUMNS": "200", "NO_COLOR": "1"}
+def rw(*args, home, env=None):
+    env = {**os.environ, "REWIND_HOME": str(home), "COLUMNS": "200", "NO_COLOR": "1", **(env or {})}
     return subprocess.run([*REWIND, *args], cwd=ROOT, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
 
 
@@ -41,7 +41,7 @@ def test_record_with_watch(tmp_path):
 
 
 def test_errors_are_friendly(tmp_path):
-    assert rw("runs", home=tmp_path).stdout.startswith("no runs yet")
+    assert rw("runs", home=tmp_path).stdout.lstrip().startswith("no runs yet")
     r = rw("record", home=tmp_path)
     assert r.returncode == 2 and "nothing to record" in r.stdout
 

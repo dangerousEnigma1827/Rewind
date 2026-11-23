@@ -14,7 +14,9 @@ A stack trace tells you where an exception surfaced. Rewind tells you which requ
 
 ## Install
 
-Requires Node.js ≥ 20 and Python ≥ 3.12 (developed on Node 24, Python 3.15; 3.14 also works).
+Requires Node.js ≥ 20 and Python ≥ 3.12 (developed on Node 24 and Python 3.15 on Windows; the test suite also passes on Ubuntu 24.04 with Python 3.12).
+
+On Ubuntu/Debian the interpreter is `python3`, and `venv` needs the `python3-venv` package (`sudo apt install python3-venv`).
 
 ```sh
 python -m venv .venv
@@ -104,11 +106,12 @@ Line numbers in your stack traces are unchanged. A variable written more than `R
 | `REWIND_HOME` | `./.rewind` | database (`rewind.db`) and raw NDJSON recordings (`runs/`) |
 | `REWIND_PROMISE_STACKS` | `1` | `0` skips promise creation stacks (about 1.9× → 1.1× overhead; loses `async` function names in chains) |
 | `REWIND_MUT_CAP` | `10000` | recorded writes per watched variable |
+| `NO_COLOR` | unset | any value turns colour off; layout and the ● ◆ ? marks stay. Piped output never has colour |
 
 ## How it works
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The experiments behind each design decision are in [spikes/RESULTS.md](spikes/RESULTS.md).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The experiments behind each design decision are in [spikes/RESULTS.md](spikes/RESULTS.md). The development history, bug record and test evidence are in [docs/handover/](docs/handover/HANDOVER.md).
 
 ```sh
-pytest          # 41 tests; most run real node processes end to end
+pytest          # 54 tests; most run real node processes end to end
 ```

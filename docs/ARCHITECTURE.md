@@ -74,3 +74,14 @@ SQLite: `runs` holds one row per run (status `ok` / `failed` / `crashed`, counts
 - ingest and lookup (`test_store.py`)
 - analysis on recordings of the actual demo (`test_analysis.py`), including invariants that every inference cites evidence, every evidence seq exists, and every observed "write" claim is backed by a mutation event
 - the CLI end to end (`test_cli.py`)
+- presentation: landing screen, help, colour handling, narrow terminals, palette contrast, console-font fallback (`test_render.py`)
+
+## Terminal presentation
+
+`render.py` owns all output; `cli.py` only passes it data. The identity ("Ultraviolet"):
+- **Colour.** One violet accent for derived facts, ids and the `◂◂` mark; text in the terminal's own colour; one mid grey for secondary detail; red only for errors. Every colour is a mid-tone with near-equal contrast on black and white (checked by a test), so one palette serves dark and light terminals.
+- **Certainty is brightness.** Observed findings are bold, derived ones carry the violet `◆`, inferred ones are dim italic.
+- **Wordmark.** `rewind` opens with REWIND in half-block letters (3 rows, only `█ ▀ ▄`, generated from bitmaps in `render.LETTERS`), rows stepping from light to deep violet; the version, the ruler's `◆` and the tagline share one right edge. 45–47 columns get a tighter letter spacing; below 45 the one-line `◂◂ r e w i n d` mark is used.
+- **Structure without boxes.** Each view opens with `◂◂ command  subject · meta`; sections are labelled dotted rules. With colour off (`NO_COLOR`, pipes) glyphs and indentation carry the structure.
+- **Help and errors.** `rewind` / `rewind --help` render a landing screen (custom `TyperGroup.format_help`); per-command help uses `TyperCommand.format_help`; usage errors replace `typer.rich_utils.rich_format_error`. The landing screen reads the database only if it already exists.
+- **Classic Windows consoles** can't fall back to another font. When the console's actual font lacks Rewind's glyphs, output is written through a translator that swaps in one-cell stand-ins (`• ♦ × =` …) present in Lucida Console, Consolas and Cascadia Mono. Pipes, files, Windows Terminal and VS Code are untouched.

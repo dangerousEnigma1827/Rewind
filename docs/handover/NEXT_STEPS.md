@@ -1,8 +1,16 @@
 # Next steps
 
-Back to [HANDOVER.md](HANDOVER.md). M7 verification was completed on 2026-11-23 (results in [TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md#m7-verification-results-2026-11-23)); only the user-side rehearsal and video remain. Nothing beyond M7 is approved work.
+Back to [HANDOVER.md](HANDOVER.md). Nothing beyond M7 is approved work.
 
-## Remaining M7 work (prioritised checklist)
+## What remains
+
+1. **Review and merge `feat/cli-visual-redesign`** (5 commits on top of `main`; 54/54 tests on Windows and Linux). User decision.
+2. **Rehearse the 7-step demo 3× and record a backup video.** User tasks left open since M7. Rehearse from the branch you will present, because the redesign changes how every screen looks.
+3. **Optional verification gaps** if they matter for judging: macOS, Python 3.13/3.14, Node 20/22. See [PROJECT_STATUS.md](PROJECT_STATUS.md#not-verified).
+
+## M7 checklist (completed 2026-11-23)
+
+Results in [TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md#m7-verification-results-2026-11-23).
 
 Rule for M7: fix only what verification shows is broken (docs or bugs). No new features, no refactors.
 
@@ -12,9 +20,9 @@ Rule for M7: fix only what verification shows is broken (docs or bugs). No new f
 - [x] Fresh `git clone` into a scratch directory **outside OneDrive**.
 - [x] Install exactly as README says, in PowerShell 5.1; note each deviation (expected: the `&&` / `activate` line).
 - [x] `pytest --collect-only -q` (expect 40) then `pytest`; record pass/fail with output. Reproduce or rule out the "nine failures".
-- [x] Demo step 1: `node demo/traffic.js` → `TypeError … reading 'price'` at `demo/checkout.js:23`, via `Timeout.paymentConfirmed` at `:18`.
+- [x] Demo step 1: `node demo/traffic.js`, run directly with plain Node and **without Rewind** (reproduces the crash before any recording; steps 2–7 use `rewind record`) → `TypeError … reading 'price'` at `demo/checkout.js:23`, via `Timeout.paymentConfirmed` at `:18`.
 - [x] Step 2: `record -l bad -w currentCart` then `timeline bad` → three interleaved orders, three writes from three requests, log `order A-101: charged $161` (correct is $128).
-- [x] Step 3: `why bad` → ● thrown in `applyDiscount` at `checkout.js:23` inside `paymentConfirmed` created in `chargePayment`; ◆ request #3 (B-202); ◆ failing line reads `currentCart`; ● last write `{order: "C-303", …}` at `checkout.js:12`; ◆ #3 wrote, #4 overwrote, then #3 read; ? race on shared module-level state.
+- [x] Step 3: `why bad` → ● thrown in `applyDiscount` at `checkout.js:23` inside `paymentConfirmed` created in `chargePayment`; ◆ request #3 (B-202); ◆ failing line reads `currentCart` (from its source text); ● last recorded write was `{order: "C-303", …}` at `checkout.js:12`; ◆ #3 wrote and #4 overwrote before the failing read at `checkout.js:23`; ? shared-state race. The read itself is not recorded: only writes to watched variables are.
 - [x] Step 4: `why bad --seq <A-101 log seq>` → overwrite by #3 derived; race explicitly not proven.
 - [x] Step 5: record without `--watch`, `why` → no mutation claimed; recommends `--watch currentCart`.
 - [x] Step 6: `record -l good -w currentCart -- node demo/traffic.js --sequential`; `diff good bad` → identical up to #2's write (needs `-w` on both runs — README fixed in M7); then good finishes #2's payment, bad sees #3 arrive.
@@ -34,7 +42,9 @@ Rule for M7: fix only what verification shows is broken (docs or bugs). No new f
 
 ## Proposed future stages (M8+) — not approved, not started
 
-Listed only so a later session doesn't have to rediscover them. Each needs explicit user approval; keep scope small.
+**The project's finish line is the agreed M7 scope plus the submission handoff.** M8–M10 below must not be started unless the user explicitly reopens the scope. A fresh session should treat them as out of scope by default, even where one looks small or useful.
+
+Listed only so a later session doesn't have to rediscover them.
 
 | stage | proposal | why it might matter |
 |---|---|---|
