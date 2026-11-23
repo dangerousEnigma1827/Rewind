@@ -323,16 +323,28 @@ def runs_table(rows, home: str):
     title("runs", f"[bold]{plural(len(rows), 'run')}[/]", "newest first")
     console.print(f"     [mute]{escape(home)}[/]")
     console.print()
-    t = Table(box=None, expand=True, header_style="mute", pad_edge=False, padding=(0, 2))
-    for c in ("run", "label", "status", "events", "errors", "exit", "when", "command"):
-        t.add_column(c, justify="right" if c in ("events", "errors", "exit") else "left",
-                     no_wrap=True, overflow="ellipsis", ratio=1 if c == "command" else None)
+    cols = ("run", "label", "status", "events", "errors", "exit", "when", "command")
+    cells = []
     for r in rows:
         cmd = " ".join(json.loads(r["cmd"]) or []) if r["cmd"] else ""
-        t.add_row(f"[id]{r['id']}[/]", f"[label]{escape(r['label'])}[/]" if r["label"] else "[mute]-[/]",
-                  STATUS.get(r["status"], r["status"]), f"{r['event_count']:,}",
-                  f"[err.t]{r['error_count']}[/]" if r["error_count"] else "[mute]0[/]",
-                  str(r["exit_code"]), f"[mute]{ago(r['started_at'])}[/]", f"[mute]{escape(cmd)}[/]")
+        cells.append((f"[id]{r['id']}[/]", f"[label]{escape(r['label'])}[/]" if r["label"] else "[mute]-[/]",
+                      STATUS.get(r["status"], r["status"]), f"{r['event_count']:,}",
+                      f"[err.t]{r['error_count']}[/]" if r["error_count"] else "[mute]0[/]",
+                      str(r["exit_code"]), f"[mute]{ago(r['started_at'])}[/]", f"[mute]{escape(cmd)}[/]"))
+    nat = [max(cell_len(Text.from_markup(x).plain) for x in (c, *(row[i] for row in cells))) for i, c in enumerate(cols)]
+    # Every column but command must fit whole, or ids and labels get cut to "ff2e5…"; narrower: keep the essentials.
+    wide = sum(nat[:-1]) + 4 * (len(cols) - 1) + 2 + 1 <= console.width  # 4-cell gaps, indent, a 1-cell "…" command
+    keep = range(len(cols)) if wide else (0, 1, 2, 4)  # run, label, status, errors
+    # compact: the label gives way (to at most 20 cells, less if the line is short) so ids, status and errors stay whole
+    label_max = None if wide else max(1, min(20, console.width - 2 - nat[0] - nat[2] - nat[4] - 2 * 3))
+    t = Table(box=None, expand=wide, header_style="mute", pad_edge=False, padding=(0, 2 if wide else 1))
+    for i in keep:
+        c = cols[i]
+        t.add_column(c, justify="right" if c in ("events", "errors", "exit") else "left",
+                     no_wrap=True, overflow="ellipsis", ratio=1 if c == "command" else None,
+                     max_width=label_max if c == "label" else None)
+    for row in cells:
+        t.add_row(*(row[i] for i in keep))
     console.print(Padding(t, (0, 0, 0, 2)))
 
 

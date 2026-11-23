@@ -113,5 +113,5 @@ Line numbers in your stack traces are unchanged. A variable written more than `R
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The experiments behind each design decision are in [spikes/RESULTS.md](spikes/RESULTS.md). The development history, bug record and test evidence are in [docs/handover/](docs/handover/HANDOVER.md).
 
 ```sh
-pytest          # 54 tests; most run real node processes end to end
+pytest          # 56 tests; most run real node processes end to end
 ```

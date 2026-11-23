@@ -123,6 +123,49 @@ def test_narrow_terminal_never_overflows(tmp_path):
         assert max(len(l) for l in out.splitlines()) <= 60, (args, out)
 
 
+def test_runs_table_keeps_ids_whole_when_narrow(tmp_path):
+    r = rw("record", "-l", "bad", "--", "node", "tests/fixtures/throw_timer.js", home=tmp_path)
+    run_id = re.search(r"recorded run (\w{8})", r.stdout).group(1)
+    wide = rw("runs", home=tmp_path, env={"COLUMNS": "100"}).stdout
+    assert "command" in wide and "events" in wide  # full layout untouched where it fits
+    for w in (64, 45, 40):
+        out = rw("runs", home=tmp_path, env={"COLUMNS": str(w)}).stdout
+        assert run_id in out and " bad " in out and "failed" in out, (w, out)
+        assert max(len(l) for l in out.splitlines()) <= w, (w, out)
+
+
+def test_runs_table_long_labels_give_way_to_ids(monkeypatch):
+    import json
+    monkeypatch.setattr(render, "ago", lambda _: "8h ago")  # column widths must not depend on the clock
+    def row(rid, label, status, errors, code, events=432):
+        return dict(id=rid, label=label, status=status, event_count=events, error_count=errors, exit_code=code,
+                    started_at="2026-11-23T10:00:00", cmd=json.dumps(["node", "demo/traffic.js"]))
+    rows = [row("aaaa1111", "bad", "failed", 1, 1), row("bbbb2222", None, "ok", 0, 0),
+            row("cccc3333", "killed", "crashed", 1, None),
+            row("dddd4444", "a-very-long-label-name-here", "ok", 0, 0, events=1234567)]
+
+    def render_at(w):
+        buf = io.StringIO()
+        monkeypatch.setattr(render, "console", Console(file=buf, width=w, theme=render.THEME, no_color=True,
+                                                       highlight=False, legacy_windows=False))
+        render.runs_table(rows, "home")
+        lines = buf.getvalue().splitlines()
+        assert max(len(l) for l in lines) <= w
+        return lines[3:]  # header row onwards
+
+    wide = render_at(100)  # a 27-cell label still fits the full layout here
+    assert all(c in wide[0] for c in ("events", "exit", "when")) and any("a-very-long-label-name-here" in l for l in wide)
+    narrow = render_at(40)  # compact: the label is cut, never the id, status or error count
+    assert narrow[0].split() == ["run", "label", "status", "errors"]
+    for rid, status, errors in (("aaaa1111", "✖ failed", "1"), ("bbbb2222", "● ok", "0"),
+                                ("cccc3333", "◌ crashed", "1"), ("dddd4444", "● ok", "0")):
+        line = next(l for l in narrow if rid in l)
+        assert status in line and line.rstrip().endswith(" " + errors), line
+    assert any(l.split()[1] == "-" for l in narrow if "bbbb2222" in l)        # missing label
+    assert any(" bad " in l for l in narrow if "aaaa1111" in l)              # normal label untouched
+    assert any("…" in l and "a-very-long-label-name-here" not in l for l in narrow if "dddd4444" in l)
+
+
 def test_palette_reads_on_dark_and_light_backgrounds():
     def lum(h):
         c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]

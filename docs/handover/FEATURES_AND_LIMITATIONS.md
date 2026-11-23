@@ -1,6 +1,6 @@
 # Features and limitations
 
-Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. CLI behaviour is covered by the 54-test suite. The M7 fresh-clone walkthrough independently verifies the documented installation and demonstration workflow ([TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md)).
+Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. CLI behaviour is covered by the 56-test suite. The M7 fresh-clone walkthrough independently verifies the documented installation and demonstration workflow ([TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md)).
 
 ## CLI commands
 
@@ -8,7 +8,7 @@ Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. C
 
 | command | options | does |
 |---|---|---|
-| `rewind` / `rewind --help` | — | Landing screen (branch `feat/cli-visual-redesign`): REWIND wordmark, runs recorded here and the latest one's status, the commands, the evidence key, and a next step based on the latest run. Bare `rewind` exits 2 (unchanged); it never creates `.rewind`. `rewind <command> --help` lists every option. |
+| `rewind` / `rewind --help` | — | Landing screen (from the CLI redesign, merged in `388fe45`): REWIND wordmark, runs recorded here and the latest one's status, the commands, the evidence key, and a next step based on the latest run. Bare `rewind` exits 2 (unchanged); it never creates `.rewind`. `rewind <command> --help` lists every option. |
 | `rewind record [OPTIONS] -- node app.js [args]` | `-l/--label NAME`, `-w/--watch VAR[,VAR]` | Runs the program with the recorder preloaded, ingests the run, prints a summary, exits with the program's exit code. `rewind record app.js` (no `node`) is accepted as shorthand. |
 | `rewind runs` | — | Recorded runs, newest first (id, label, status, counts). |
 | `rewind timeline [RUN]` | `-r/--request N`, `-k/--kind log,http,error,mutation,async,run`, `-c/--callbacks`, `--raw` | The run's story in order: requests, logs, writes, errors. `-r` one request; `-c` adds every user callback firing; `--raw` every recorded event unfiltered. |

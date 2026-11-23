@@ -4,8 +4,8 @@ Back to [HANDOVER.md](HANDOVER.md). Nothing beyond M7 is approved work.
 
 ## What remains
 
-1. **Review and merge `feat/cli-visual-redesign`** (5 commits on top of `main`; 54/54 tests on Windows and Linux). User decision.
-2. **Rehearse the 7-step demo 3× and record a backup video.** User tasks left open since M7. Rehearse from the branch you will present, because the redesign changes how every screen looks.
+1. ~~Review and merge `feat/cli-visual-redesign`~~ **Done:** merged into `main` as PR #1 (`388fe45`).
+2. **Rehearse the 7-step demo 3× and record a backup video.** User tasks left open since M7. Rehearse from `main`, which now includes the redesign.
 3. **Optional verification gaps** if they matter for judging: macOS, Python 3.13/3.14, Node 20/22. See [PROJECT_STATUS.md](PROJECT_STATUS.md#not-verified).
 
 ## M7 checklist (completed 2026-11-23)

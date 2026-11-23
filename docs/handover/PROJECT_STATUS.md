@@ -6,8 +6,8 @@ As of 2026-11-23. Back to [HANDOVER.md](HANDOVER.md). Full history: [ENGINEERING
 
 | ref | commit | state |
 |---|---|---|
-| `main` | `0d4cb3d` M7: fresh-clone verification fixes | same as `origin/main` |
-| `feat/cli-visual-redesign` | `6320276` fix: landing screen fits 80x24 and switches at a real 45 columns | 5 commits ahead of `main` (`769708f`, `467936b`, `49b34bb`, `b903d1e`, `6320276`); **not merged, not pushed**, awaiting review |
+| `main` | `388fe45` Merge pull request #1 from dangerousEnigma1827/feat/cli-visual-redesign | same as `origin/main` |
+| `feat/cli-visual-redesign` | `2b3b7b2` docs: consolidate project handover and engineering history | **merged** into `main` as PR #1 (`388fe45`): `769708f`, `467936b`, `49b34bb`, `b903d1e`, `6320276`, `2b3b7b2` on top of `0d4cb3d`. The branch still exists locally and on `origin`. |
 
 ## What Rewind does
 
@@ -30,9 +30,9 @@ A causal debugger for Node.js:
 | `diff` | done | `a1b9988` |
 | Demo, `demo/fix.patch`, README, `docs/ARCHITECTURE.md` | done | `ab02a7b` |
 | Fresh-clone verification | done | `0d4cb3d` |
-| Ultraviolet terminal identity, landing screen, help/errors, glyph fallback | done (branch) | `769708f`, `467936b` |
-| REWIND wordmark | done (branch) | `b903d1e` |
-| Linux / short-terminal fixes | done (branch) | `6320276` |
+| Ultraviolet terminal identity, landing screen, help/errors, glyph fallback | done (merged in `388fe45`) | `769708f`, `467936b` |
+| REWIND wordmark | done (merged in `388fe45`) | `b903d1e` |
+| Linux / short-terminal fixes | done (merged in `388fe45`) | `6320276` |
 
 ## Verified
 
@@ -85,7 +85,7 @@ Additionally:
 
 | item | status |
 |---|---|
-| Review and merge `feat/cli-visual-redesign` | awaiting user |
+| Review and merge `feat/cli-visual-redesign` | done: merged as PR #1 (`388fe45`) |
 | Rehearse the demo 3×, record a backup video | user tasks from M7, not done |
 | "Nine failures" from an earlier session | not reproduced; cause unknown ([B1](ENGINEERING_LOG.md#b1-nine-unexplained-test-failures)) |
 | M8 and later | proposed only, not approved ([NEXT_STEPS.md](NEXT_STEPS.md)) |

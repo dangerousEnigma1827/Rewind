@@ -16,9 +16,10 @@ is reported as inferred. Every finding is labelled
 
 ## Current state (one paragraph)
 
-M0–M7 are on `main` at `0d4cb3d` (same as `origin/main`). The terminal redesign (Ultraviolet identity,
-glyph fallback, REWIND wordmark, Linux and short-terminal fixes) is on `feat/cli-visual-redesign` at
-`6320276`, 5 commits ahead, not merged and not pushed. 54/54 tests pass on Windows and on Linux (WSL2).
+M0–M7 and the terminal redesign (Ultraviolet identity, glyph fallback, REWIND wordmark, Linux and
+short-terminal fixes) are on `main`. `feat/cli-visual-redesign` (`6320276` plus the docs commit `2b3b7b2`)
+was merged as PR #1 in `388fe45`, which is also `origin/main`. 54/54 tests passed on Windows and on Linux
+(WSL2) in the post-merge audit at `388fe45`; the post-audit fixes add two tests (56).
 The user-side demo rehearsal and backup video remain. M8+ is not started and not approved.
 Details: [PROJECT_STATUS.md](PROJECT_STATUS.md).
 
@@ -32,7 +33,7 @@ Details: [PROJECT_STATUS.md](PROJECT_STATUS.md).
 | [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md) | every command and option, what `--watch` does and does not see |
 | [TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md) | test suite, test-count history, M0 experiments, M7 results, terminal compatibility matrix |
 | [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md) | repo layout, Windows install, running Rewind, the demo, tests, env vars |
-| [NEXT_STEPS.md](NEXT_STEPS.md) | what remains (merge review, rehearsal), the completed M7 checklist, proposed (not approved) later stages |
+| [NEXT_STEPS.md](NEXT_STEPS.md) | what remains (demo rehearsal), the completed M7 checklist, proposed (not approved) later stages |
 
 Pre-existing docs, still authoritative and not replaced: [`README.md`](../../README.md),
 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), [`spikes/RESULTS.md`](../../spikes/RESULTS.md).
@@ -48,8 +49,8 @@ Pre-existing docs, still authoritative and not replaced: [`README.md`](../../REA
 ## Instructions for a fresh Claude Code session
 
 1. Read this file, then `PROJECT_STATUS.md` and `NEXT_STEPS.md`. Read `ENGINEERING_LOG.md` before changing anything a past bug touched.
-2. Run `git status`, `git branch -vv` and `git log --oneline -8` first. Expected: `main` at `0d4cb3d`, `feat/cli-visual-redesign` at `6320276` or a later docs commit on it. If not, the state has moved on — re-check before trusting these docs.
-   **Uncommitted documentation is expected.** The documentation audit may have left modified Markdown files (`README.md`, `docs/handover/*.md`) and an untracked `docs/handover/ENGINEERING_LOG.md` awaiting the user's review. Do **not** reset, restore, clean, stash or otherwise discard them (`git reset --hard`, `git restore`, `git checkout -- …`, `git clean`, `git stash`). Leave them for the user to commit.
+2. Run `git status`, `git branch -vv` and `git log --oneline -8` first. Expected: `main` at `388fe45` (merge of PR #1, `feat/cli-visual-redesign`) or a later commit. If not, the state has moved on — re-check before trusting these docs.
+   **Uncommitted changes belong to the user.** Do **not** reset, restore, clean, stash or otherwise discard them (`git reset --hard`, `git restore`, `git checkout -- …`, `git clean`, `git stash`). Leave them for the user to review and commit.
 3. Scope: no milestone is open. Do not start M8 or add features unless the user approves it.
 4. User working rules (from earlier sessions):
    - work milestone by milestone, verify with real runs, commit at completed milestones;
