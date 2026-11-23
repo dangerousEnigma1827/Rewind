@@ -157,7 +157,7 @@ GROUPS = (("capture", (("record", "-- node app.js", "run a program under the rec
                        ("runs", "", "everything recorded here, newest first"))),
           ("inspect", (("timeline", "<run>", "what happened, in order"),
                        ("tree", "<run>", "who scheduled whom"))),
-          ("explain", (("why", "<run>", "the causal story behind an error, or any event"),
+          ("explain", (("why", "<run>", "why an error (or any event) happened"),
                        ("diff", "<a> <b>", "where two executions part ways"))))
 
 
@@ -192,8 +192,8 @@ def _splash(version: str):
     """The product name first. Wordmark rows step from light to deep violet (UV light from above); the version
     sits on its baseline, and the ruler's ◆, the version and the tagline all end in the same column."""
     room = width() - 2
-    # 44 usable cells = a 45-column terminal (Rich keeps the last column free on Windows); below that, the compact mark
-    fits = [m for m in (WORDMARK, WORDMARK_TIGHT) if len(m[0]) + 2 + len(version) <= room] if width() >= 44 else []
+    columns = console.width + console.legacy_windows  # the terminal's real width: Rich keeps one column free in legacy mode
+    fits = [m for m in (WORDMARK, WORDMARK_TIGHT) if len(m[0]) + 2 + len(version) <= room] if columns >= 45 else []
     mark = fits[0] if fits else None
     span = min(max(len(mark[0]) + 2 + len(version) if mark else 0, len(TAGLINE)), room)
     console.print()
@@ -212,14 +212,15 @@ def landing(rows: list, home: str, version: str):
     """`rewind` with no command: the wordmark, what is recorded here, the workflows, and a next step."""
     _splash(version)
 
-    def block(*lines):  # every block shares one 8-cell label column, so content always starts at the same place
+    def block(*lines, last=False):  # every block shares one 8-cell label column, so content always starts at the same place
         g = Table.grid(padding=(0, 3))
         g.add_column(style="mute", no_wrap=True, width=8)
         g.add_column(overflow="fold")
         for label_, content in lines:
             g.add_row(label_, content)
         console.print(Padding(g, (0, 0, 0, 2)))
-        console.print()
+        if not last:  # no trailing blank: at 80x24 the whole screen, prompt included, stays in view
+            console.print()
 
     if rows:
         last = rows[0]
@@ -255,7 +256,7 @@ def landing(rows: list, home: str, version: str):
     else:
         nxt, why = f"rewind why {_ref(rows[0])}", f"the latest run {rows[0]['status']}"
     block(("evidence", LEGEND))
-    block(("next", f"[bold]{escape(nxt)}[/]   [mute]{why}[/]"), ("", "[mute]rewind <command> --help for every option[/]"))
+    block(("next", f"[bold]{escape(nxt)}[/]   [mute]{why}[/]"), ("", "[mute]rewind <command> --help for every option[/]"), last=True)
 
 
 def command_help(cmd, ctx):

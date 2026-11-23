@@ -44,11 +44,11 @@ def test_usage_errors_keep_message_and_exit_code(tmp_path):
         assert r.returncode == 2 and "error:" in r.stderr and msg in r.stderr and "┌" not in r.stderr
 
 
-def _vt_console(monkeypatch, no_color: bool, width: int = 100):
+def _vt_console(monkeypatch, no_color: bool, width: int = 100, height: int = 25, legacy: bool = False):
     monkeypatch.setenv("NO_COLOR", "1" if no_color else "")  # Rich reads it at construction; empty = unset
     buf = io.StringIO()  # read what is actually written: export_text() would bypass NO_COLOR stripping
-    con = Console(file=buf, theme=render.THEME, force_terminal=True, color_system="truecolor", legacy_windows=False,
-                  width=width, highlight=False)
+    con = Console(file=buf, theme=render.THEME, force_terminal=True, color_system="truecolor", legacy_windows=legacy,
+                  width=width, height=height, highlight=False)
     monkeypatch.setattr(render, "console", con)
     return buf
 
@@ -73,7 +73,7 @@ def test_no_color_keeps_structure_and_drops_colour(monkeypatch):
 def test_wordmark_fits_every_width_and_falls_back_below_45(monkeypatch):
     plain = re.compile(r"\x1b\[[\d;]*m")
     for width, expect in ((120, render.WORDMARK), (80, render.WORDMARK), (60, render.WORDMARK),
-                          (46, render.WORDMARK_TIGHT), (44, render.WORDMARK_TIGHT), (43, None), (30, None)):
+                          (46, render.WORDMARK_TIGHT), (45, render.WORDMARK_TIGHT), (44, None), (30, None)):
         buf = _vt_console(monkeypatch, no_color=True, width=width)
         render.landing([], ".rewind", "0.1.0")
         lines = plain.sub("", buf.getvalue()).splitlines()
@@ -87,6 +87,31 @@ def test_wordmark_fits_every_width_and_falls_back_below_45(monkeypatch):
         if width >= 48:
             assert lines[5].rstrip() == "  " + render.TAGLINE and len(lines[5].rstrip()) == version_end  # one right edge
     assert len(render.WORDMARK[0]) == 38 and len({len(r) for r in render.WORDMARK + render.WORDMARK_TIGHT}) == 2
+
+
+def test_wordmark_switch_is_the_terminals_45_columns_in_every_rich_mode(monkeypatch):
+    # Rich keeps one column free only in legacy Windows mode; the switch must follow the real terminal width either way.
+    for legacy in (False, True):
+        for columns, has_mark in ((45, True), (44, False)):
+            buf = _vt_console(monkeypatch, no_color=True, width=columns, legacy=legacy)
+            render.landing([], ".rewind", "0.1.0")
+            assert ("█" in buf.getvalue()) is has_mark, (legacy, columns)
+
+
+def test_short_terminals_scroll_instead_of_clipping(monkeypatch):
+    row = {"id": "cd8d67ad", "label": "bad", "status": "failed", "error_count": 1, "started_at": None}
+    seen = {}
+    for w, h in ((80, 24), (60, 24), (45, 24), (40, 24), (80, 15), (60, 12), (30, 12)):
+        for no_color in (False, True):
+            buf = _vt_console(monkeypatch, no_color=no_color, width=w, height=h)
+            render.landing([row], ".rewind", "0.1.0")
+            text = re.sub(r"\x1b\[[\d;]*m", "", buf.getvalue())
+            lines = text.splitlines()
+            assert max(len(l) for l in lines) <= w, (w, h)
+            assert all(c in text for c in ("record", "timeline", "tree", "why", "diff", "rewind why bad")), (w, h)
+            # height never truncates or reflows: the same width gives the same screen, colour or not; the terminal scrolls
+            assert seen.setdefault(w, text) == text, (w, h, no_color)
+    assert len(seen[80].splitlines()) <= 23  # 80x24: the whole landing screen plus the prompt line stays in view
 
 
 def test_narrow_terminal_never_overflows(tmp_path):

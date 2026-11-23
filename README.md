@@ -14,7 +14,9 @@ A stack trace tells you where an exception surfaced. Rewind tells you which requ
 
 ## Install
 
-Requires Node.js ≥ 20 and Python ≥ 3.12 (developed on Node 24, Python 3.15; 3.14 also works).
+Requires Node.js ≥ 20 and Python ≥ 3.12 (developed on Node 24 and Python 3.15 on Windows; the test suite also passes on Ubuntu 24.04 with Python 3.12).
+
+On Ubuntu/Debian the interpreter is `python3`, and `venv` needs the `python3-venv` package (`sudo apt install python3-venv`).
 
 ```sh
 python -m venv .venv
@@ -111,5 +113,5 @@ Line numbers in your stack traces are unchanged. A variable written more than `R
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The experiments behind each design decision are in [spikes/RESULTS.md](spikes/RESULTS.md).
 
 ```sh
-pytest          # 52 tests; most run real node processes end to end
+pytest          # 54 tests; most run real node processes end to end
 ```

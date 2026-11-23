@@ -12,9 +12,9 @@ Runner: `pytest` (config in `pyproject.toml`: `testpaths = ["tests"]`, `-p no:ca
 | `test_store.py` | 5 functions (one parametrized ×3) = 7 items | ingest round-trip, ok/failed status, crashed + torn line, re-ingest replaces, run resolution |
 | `test_analysis.py` | 11 | request attribution on demo, describe names user code, tree pruning/folding, `short_fn`, why with watch proves overwrite, why without watch never claims a mutation, silent overcharge is hedged, sequential run clean, rejection through await, diff good/good empty, diff good/bad points at interleaving |
 | `test_cli.py` | 8 | record + runs, `-N` run refs not parsed as options (added in M7), record with watch, friendly errors, timeline + tree on demo, why, diff, diff ignores one-sided watched writes |
-| `test_render.py` | 11 | landing (no side effects, next step, exit 2), wordmark at every width (full / tight / compact below 45, one right edge, readable without colour), help keeps every option, usage errors, no escape codes when piped, NO_COLOR keeps structure, no overflow at 60 columns, palette contrast on black and white, console-font fallback, evidence hierarchy styling |
+| `test_render.py` | 13 | landing (no side effects, next step, exit 2), wordmark at every width (full / tight / compact below 45, one right edge, readable without colour), the 45-column switch in both Rich modes, short terminals scroll instead of clipping (80×24 … 30×12, colour on and off), help keeps every option, usage errors, no escape codes when piped, NO_COLOR keeps structure, no overflow at 60 columns, palette contrast on black and white, console-font fallback, evidence hierarchy styling |
 
-Count: 39 test functions → **41 collected items** after M7 (40 before; the ×3 parametrization adds 2). The CLI visual redesign (branch `feat/cli-visual-redesign`) adds `test_render.py` → **52**.
+Count: 39 test functions → **41 collected items** after M7 (40 before; the ×3 parametrization adds 2). The CLI visual redesign (branch `feat/cli-visual-redesign`) adds `test_render.py` → **54**.
 
 Fixtures: `chain.js`, `throw_timer.js`, `reject_await.js`, `http_two.js`, `http_keepalive.js`, `mutations.js`, `many_writes.js`, `esm_watch.mjs`, `kill_after_error.js`.
 
@@ -77,4 +77,23 @@ Fresh `git clone` into a scratch dir outside OneDrive, README install in PowerSh
 - P1: run refs `last`, label and id prefix worked; `-1`/`-2` failed with "No such option" (fixed, regression test); after `--` they resolved correctly and `-7` of 6 gave "only 6 runs recorded". Unknown run → `error: no run matches '…'`, exit 2. All 12 `why --evidence` seqs and the diff's A-side seqs exist in `timeline --raw` and match their findings. Statuses: bad/nowatch `failed`, good/fixed `ok`. `rewind record` passes exit code 1 from the crashing demo, 0 from good.
 - Note: piping into PowerShell's `Select-Object -First N` gives exit 255 because PowerShell stops the pipeline; full output exits 0. Not a Rewind defect.
 
-Not verified: Python 3.12–3.14, `REWIND_PROMISE_STACKS=0`, interactive-console (TTY) output behaviour, Linux/macOS.
+Not verified at M7: Python 3.12–3.14, `REWIND_PROMISE_STACKS=0`, interactive-console (TTY) output behaviour, Linux/macOS. (Linux, Python 3.12 and real terminals were covered later; see the matrix below.)
+
+## Terminal compatibility matrix (2026-11-23, branch `feat/cli-visual-redesign`)
+
+How each row was checked:
+- **Real terminal**: the actual `rewind` CLI ran inside that terminal at that size, and the screen (and scrollback where available) was read back: tmux `capture-pane` on Linux; `ReadConsoleOutputCharacterW` on Windows.
+- **Simulated**: Rich rendering at an explicit width × height in `tests/test_render.py`; no terminal involved.
+
+| Environment | Status | How |
+|---|---|---|
+| Windows 11, PowerShell 5.1 in the classic console (conhost), Lucida Console | **Verified, real terminal** | Window and buffer resized to 80×24, 60×24, 45×24, 44×24, 40×24, 80×15, 60×12. Colour on; glyph stand-ins (• ♦ × =) active because Lucida lacks the originals. Also `why`, `timeline`, `tree` at 120 columns. |
+| Windows 11, classic console, Consolas | **Verified, real terminal** (120 columns only) | `why`, `timeline`, `tree`; stand-ins active (Consolas lacks ◆ ✖ ✎ ◉ ⚙). |
+| Windows Terminal 1.25 (ConPTY) | **Verified, real terminal**, landing only | 80×24, 80×15, 60×12, 45×24/45×45, 44×24/44×45, 60×40. `WT_SESSION` set → original glyphs kept. Only the visible rows can be read back under ConPTY, and the glyphs as *drawn* by Windows Terminal's own font fallback were not inspected visually. |
+| Windows, piped / redirected output | **Verified** | Full suite (54) on Python 3.15.2; no escape codes; works with `PYTHONUTF8=0`. |
+| Linux: Ubuntu 24.04 on WSL2, Python 3.12.3, Node 24.22.2 | **Verified, real terminal** | Fresh clone, full suite 54/54. Landing in tmux at 80×24, 60×24, 45×24, 44×24, 40×24, 80×15, 60×12, 30×12, colour on and `NO_COLOR=1`: terminal text identical to Rich's own output at that width (apart from the "Ns ago" clock), widest line ≤ width. `why --evidence`, `timeline`, `tree`, `diff`, `runs`, `why --help` at 80×24 and 40×24 likewise identical. `record` in tmux: header, untouched program output, summary; spinner erased. tmux reports 256-colour/truecolour SGRs; actual glyph drawing depends on the host terminal's font. |
+| Linux on real hardware / other distributions / other terminal emulators | **Not tested** | WSL2 Ubuntu inside tmux is the only Linux run. |
+| macOS | **Not tested** | No macOS machine was available. Nothing in the code is Windows-only outside the guarded console-font check, but that is not verification. |
+| Short terminal dimensions | **Real terminal** at the sizes above (conhost, tmux, Windows Terminal); **simulated** in `test_short_terminals_scroll_instead_of_clipping` at 80×24, 60×24, 45×24, 40×24, 80×15, 60×12, 30×12 with colour on and off | Output never depends on height: it is printed once and the terminal scrolls. At 80×24 the whole landing screen (23 lines) plus the prompt stays in view; on shorter screens the commands and the `next` hint remain on screen and the wordmark is in the scrollback. |
+
+Found and fixed during this review: in real terminals (Linux, and Windows VT consoles) a 44-column window still showed the wordmark, because the switch assumed Rich always keeps one column free; it now uses the terminal's real width (`console.width + console.legacy_windows`). And at 80×24 the landing screen was 25 lines, so the prompt pushed the top two wordmark rows off screen; one description that wrapped was reworded and the trailing blank line dropped (23 lines, nothing removed).
