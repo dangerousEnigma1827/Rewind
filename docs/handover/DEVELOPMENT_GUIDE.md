@@ -25,7 +25,7 @@ rewind/                     repo root
 ├─ tests/
 │  ├─ conftest.py           record / rewind_home fixtures
 │  ├─ fixtures/*.js|.mjs    small Node programs with known causality
-│  └─ test_{recorder,store,analysis,cli}.py
+│  └─ test_{recorder,store,analysis,cli,render}.py
 ├─ spikes/                  M0 experiments + RESULTS.md (evidence, not shipped)
 ├─ docs/ARCHITECTURE.md     concise architecture
 ├─ docs/handover/           this handover set

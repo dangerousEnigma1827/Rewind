@@ -104,11 +104,12 @@ Line numbers in your stack traces are unchanged. A variable written more than `R
 | `REWIND_HOME` | `./.rewind` | database (`rewind.db`) and raw NDJSON recordings (`runs/`) |
 | `REWIND_PROMISE_STACKS` | `1` | `0` skips promise creation stacks (about 1.9× → 1.1× overhead; loses `async` function names in chains) |
 | `REWIND_MUT_CAP` | `10000` | recorded writes per watched variable |
+| `NO_COLOR` | unset | any value turns colour off; layout and the ● ◆ ? marks stay. Piped output never has colour |
 
 ## How it works
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The experiments behind each design decision are in [spikes/RESULTS.md](spikes/RESULTS.md).
 
 ```sh
-pytest          # 41 tests; most run real node processes end to end
+pytest          # 51 tests; most run real node processes end to end
 ```

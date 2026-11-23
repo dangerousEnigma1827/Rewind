@@ -123,5 +123,5 @@ The raw file is kept after ingest as ground truth and is readable even after a h
 ## 7. CLI and rendering
 
 - `rewind/cli.py`: Typer app, entry point `rewind = rewind.cli:main` (pyproject). Commands: `record`, `runs`, `timeline`, `tree`, `why`, `diff` — details in [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md).
-- `rewind/render.py`: Rich console, theme, markers `●` observed, `◆` derived, `?` inferred; `--evidence` prints backing seqs.
+- `rewind/render.py`: Rich console and the "Ultraviolet" theme, markers `●` observed, `◆` derived, `?` inferred; `--evidence` prints backing seqs. Also the landing screen, per-command help, usage errors and the classic-console glyph fallback. Design rules: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md#terminal-presentation).
 - `rewind/__init__.py` exports `RECORDER`, the absolute path of `recorder/recorder.js` (the package is installed editable, so the recorder is found in the repo).
