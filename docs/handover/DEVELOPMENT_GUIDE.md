@@ -63,7 +63,7 @@ pip install -e ".[dev]"
 npm install --prefix recorder
 ```
 
-The README currently shows `python -m venv .venv && .venv/Scripts/activate`, which is suspected not to work in PowerShell 5.1 (see [PROJECT_STATUS.md](PROJECT_STATUS.md)); the README has not been changed by this handover.
+Verified in M7: in PowerShell, `.venv/Scripts/activate` also works (resolves to `Activate.ps1`); only `&&` was broken, and the README now uses two lines.
 
 ## Running Rewind
 
@@ -78,13 +78,15 @@ rewind why myrun --evidence
 rewind diff good bad
 ```
 
+`-N` run refs (`rewind why -1`, `rewind diff -2 -1`) work since M7; before that Click rejected them as unknown options.
+
 Data goes to `$REWIND_HOME` (default `.\.rewind` in the current directory): `rewind.db` plus raw `runs\<id>.ndjson`. Delete the folder to start fresh.
 
 ## The Phantom Discount demo
 
 `demo/traffic.js` starts `demo/checkout.js` on an ephemeral port, sends a `/health` warm-up, then three orders A-101, B-202, C-303 at 0/40/100 ms with payment delays 80/150/10 ms (≥40 ms margins chosen for a deterministic interleaving). `--sequential` (or `DEMO_SEQUENTIAL=1`) sends them one at a time. The bug: `currentCart` (checkout.js:6) is shared; each order's `loadCart` overwrites it (line 12) and `applyDiscount` reads it after the `paymentConfirmed` timer (line 18) at line 23.
 
-Walkthrough, from the repo root (expected outputs are as **claimed by README**, not re-verified):
+Walkthrough, from the repo root (outputs verified in M7, 2026-11-23):
 
 ```powershell
 node demo/traffic.js                                       # TypeError reading 'price' at checkout.js:23
@@ -94,8 +96,8 @@ rewind why bad                                             # thrown in applyDisc
 rewind why bad --seq <seq of the A-101 log line>           # silent overcharge; race marked not proven
 rewind record -l nowatch -- node demo/traffic.js
 rewind why nowatch                                         # suspects shared state, recommends --watch
-rewind record -l good -- node demo/traffic.js --sequential
-rewind diff good bad                                       # identical up to #2's write, then interleaving differs
+rewind record -l good -w currentCart -- node demo/traffic.js --sequential
+rewind diff good bad                                       # identical up to #2's write, then interleaving differs (-w needed on both runs)
 git apply demo/fix.patch                                   # ONLY in a scratch clone
 rewind record -l fixed -- node demo/traffic.js
 rewind why fixed                                           # no errors

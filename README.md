@@ -17,7 +17,8 @@ A stack trace tells you where an exception surfaced. Rewind tells you which requ
 Requires Node.js ≥ 20 and Python ≥ 3.12 (developed on Node 24, Python 3.15; 3.14 also works).
 
 ```sh
-python -m venv .venv && .venv/Scripts/activate      # Windows   (Linux/macOS: source .venv/bin/activate)
+python -m venv .venv
+.venv/Scripts/activate      # Windows PowerShell   (Git Bash: source .venv/Scripts/activate; Linux/macOS: source .venv/bin/activate)
 pip install -e ".[dev]"
 npm install --prefix recorder                         # only needed for --watch
 ```
@@ -29,7 +30,7 @@ rewind record --label bad --watch currentCart -- node demo/traffic.js
 rewind why bad                 # the causal story of the crash
 rewind timeline bad            # requests, logs, writes, errors in order
 rewind tree bad                # who scheduled whom
-rewind record --label good -- node demo/traffic.js --sequential
+rewind record --label good --watch currentCart -- node demo/traffic.js --sequential
 rewind diff good bad           # where the two executions part ways
 ```
 
@@ -60,7 +61,7 @@ node demo/traffic.js
 Plain Node says nothing about *which* order failed, or why. Run it under rewind:
 
 1. `rewind record -l bad -w currentCart -- node demo/traffic.js`
-2. `rewind timeline bad` shows the three orders interleaving and three writes to `currentCart` from three different requests. It also shows a log line the terminal never printed (on Windows, stdout to a pipe is lost when the process crashes): **order A-101 was charged $161 instead of $128.** The bug has a second, silent victim.
+2. `rewind timeline bad` shows the three orders interleaving and three writes to `currentCart` from three different requests. It also ties a log line that is easy to miss next to the crash to its request: **order A-101 (#2) was charged $161 instead of $128.** The bug has a second, silent victim.
 3. `rewind why bad` gives the crash's story:
    - ● thrown in `applyDiscount` at `demo/checkout.js:23`, inside the `paymentConfirmed` timer created in `chargePayment`
    - ◆ belongs to request #3 (order B-202)
@@ -70,7 +71,7 @@ Plain Node says nothing about *which* order failed, or why. Run it under rewind:
    - ? likely root cause: a race on shared module-level state
 4. `rewind why bad --seq <the A-101 log seq>` gives the silent overcharge's story. Here the overwrite by #3 is *derived*, but the race is explicitly marked *not proven*, because reads are not recorded.
 5. Record without `--watch` and run `why` again. Rewind will not claim a mutation it didn't see. It only suspects shared state, and tells you to re-record with `--watch currentCart`.
-6. `rewind record -l good -- node demo/traffic.js --sequential`, then `rewind diff good bad`. The runs are identical up to #2's write to `currentCart`. Next, the good run lets #2's payment finish, but in the bad run #3 arrives first. The code path is the same; only the interleaving differs.
+6. `rewind record -l good -w currentCart -- node demo/traffic.js --sequential`, then `rewind diff good bad`. (Without `-w` on both runs, writes are left out of the comparison and the shared prefix ends at #2's `loadCart` callback instead.) The runs are identical up to #2's write to `currentCart`. Next, the good run lets #2's payment finish, but in the bad run #3 arrives first. The code path is the same; only the interleaving differs.
 7. `git apply demo/fix.patch` (cart passed per request), re-record, and `rewind why` reports no errors. All three totals are correct.
 
 ## What `--watch` captures, exactly
@@ -109,5 +110,5 @@ Line numbers in your stack traces are unchanged. A variable written more than `R
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The experiments behind each design decision are in [spikes/RESULTS.md](spikes/RESULTS.md).
 
 ```sh
-pytest          # 40 tests; most run real node processes end to end
+pytest          # 41 tests; most run real node processes end to end
 ```

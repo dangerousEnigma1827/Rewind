@@ -33,7 +33,7 @@ Without `--watch` it never claims a mutation: it only suspects module-level stat
 
 ## Diff
 
-Token stream per run (effectful callbacks, requests, logs, writes by location/op, errors, exit; ids and times stripped), aligned with `difflib.SequenceMatcher`. Reports the first divergence, whether it is a move (same step, different order) or a genuine only-A/only-B step, and counts. On the demo, good (sequential) vs bad (concurrent) is reported to diverge right after request #2's write to `currentCart`: same code path, different interleaving.
+Token stream per run (effectful callbacks, requests, logs, writes by location/op, errors, exit; ids and times stripped), aligned with `difflib.SequenceMatcher`. Reports the first divergence, whether it is a move (same step, different order) or a genuine only-A/only-B step, and counts. On the demo, good (sequential) vs bad (concurrent), both recorded with `-w currentCart`, diverge right after request #2's write to `currentCart`: same code path, different interleaving (verified M7). If only one run was watched, writes are left out and the shared prefix ends at #2's `loadCart` callback.
 
 ## Mutation tracking (`--watch`)
 
@@ -50,7 +50,7 @@ Not captured:
 - reads (never recorded)
 
 More than `REWIND_MUT_CAP` (default 10 000) writes to one name → counting continues, values stop.
-Requires `npm install --prefix recorder` (acorn, acorn-walk, magic-string); without `--watch` the recorder needs no npm packages.
+Requires `npm install --prefix recorder` (acorn, acorn-walk, magic-string); without `--watch` the recorder needs no npm packages. If they are missing, a `--watch` run crashes at preload with Node's `Cannot find module 'acorn'` (verified M7).
 
 ## Supported scenarios
 

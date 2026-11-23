@@ -19,6 +19,10 @@ app = typer.Typer(add_completion=False, no_args_is_help=True, rich_markup_mode="
                   help="Causal time-travel debugging for Node.js. Record a run, then ask why.")
 
 
+# Click would reject a `-N` run ref ("No such option: -1"); pass unknown dash-tokens through as the run argument.
+RUN_REF = {"ignore_unknown_options": True}
+
+
 def _db():
     return store.connect()
 
@@ -88,7 +92,7 @@ def _ctx_aid(e):
     return e.aid if e.kind.startswith("async.") else e.eid
 
 
-@app.command()
+@app.command(context_settings=RUN_REF)
 def timeline(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
              request: Optional[int] = typer.Option(None, "--request", "-r", help="Only events of request #N."),
              kind: Optional[str] = typer.Option(None, "--kind", "-k", help="Comma list: log,http,error,mutation,async,run."),
@@ -109,7 +113,7 @@ def timeline(run: Optional[str] = typer.Argument(None, help="Run id prefix, labe
     render.timeline(r, rows)
 
 
-@app.command()
+@app.command(context_settings=RUN_REF)
 def tree(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
          request: Optional[int] = typer.Option(None, "--request", "-r", help="Root the tree at request #N."),
          full: bool = typer.Option(False, "--full", help="Show every async resource, including quiet and internal ones.")):
@@ -125,7 +129,7 @@ def tree(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, '
     render.tree(r, node, pruned, "main module" if root == 1 else r.requests[request].label)
 
 
-@app.command()
+@app.command(context_settings=RUN_REF)
 def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
         error: int = typer.Option(1, "--error", "-e", help="Which error to explain (1 = first)."),
         seq: Optional[int] = typer.Option(None, "--seq", "-s", help="Explain any event by its seq instead of an error."),
@@ -150,7 +154,7 @@ def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'l
         console.print("  [faint]tip: record with --watch <variable> to capture writes to shared state[/]")
 
 
-@app.command()
+@app.command(context_settings=RUN_REF)
 def diff(a: str = typer.Argument(..., help="Baseline run (e.g. good)."),
          b: str = typer.Argument(..., help="Run to compare (e.g. bad)."),
          all_: bool = typer.Option(False, "--all", help="Include callbacks outside any request (harness, plumbing)."),

@@ -13,7 +13,7 @@ As of 2026-11-22. Branch `main`. Back to [HANDOVER.md](HANDOVER.md).
 | `caea6e5` | M2: SQLite store, rewind record and rewind runs |
 
 M0 (spikes) and M1 (recorder) are older commits not shown above. Working tree was clean at session start.
-After this handover is committed, HEAD will be a `docs: add comprehensive project handover` commit on top of `ab02a7b`.
+`4097ca2` docs: add comprehensive project handover — on top of `ab02a7b`; the M7 commit follows it.
 
 ## Milestones
 
@@ -26,29 +26,32 @@ After this handover is committed, HEAD will be a `docs: add comprehensive projec
 | M4 | `why` (incl. the planned "M4.5" `--watch` mutation tracking) | Done |
 | M5 | `diff` | Done |
 | M6 | Demo polish, README, `docs/ARCHITECTURE.md`, `demo/fix.patch`, fresh-clone fixes | Done (commit message says "fresh-clone fixes"; whether a full fresh-clone walkthrough passed at M6 is not recorded) |
-| M7 | Buffer: fresh-clone verification from README, bug fixes, rehearse demo 3×, backup video | **In progress — interrupted, not complete** |
+| M7 | Buffer: fresh-clone verification from README, bug fixes, rehearse demo 3×, backup video | **Verification done 2026-11-23** (commit `M7: fresh-clone verification fixes`): fresh clone, 41/41 tests, all 7 demo steps, P1 checks. Demo rehearsal 3× and backup video remain with the user. |
 
 "Done" means committed and previously reported working by the earlier session; tests were **not** re-run while writing this.
 
-## M7: where it was interrupted
+## M7: the earlier interrupted attempt
 
-- An earlier session began the M7 fresh-clone verification / rehearsal and was interrupted.
-- **No log, note, branch or file in the repository records which step it reached or what it found.** The working tree was clean at the start of this session, so any partial M7 work left no committed or uncommitted changes in this repo.
-- Treat M7 as **not started** for planning purposes. The full checklist is in [NEXT_STEPS.md](NEXT_STEPS.md).
+- An earlier session began the M7 fresh-clone verification / rehearsal and was interrupted; nothing in the repo records how far it got. M7 was then redone from scratch on 2026-11-23 (results below).
+
+## M7 results (2026-11-23, verified)
+
+Defects found by verification and fixed in the M7 commit:
+1. **`-N` run selector was unusable**: `rewind timeline -1` → "No such option: -1" (Click parsed it as a flag). Fixed by `ignore_unknown_options` on `timeline/tree/why/diff`; regression test `test_negative_run_refs_are_not_parsed_as_options`.
+2. **README install line** used `&&`, a parse error in PowerShell 5.1. Split into two lines. (`.venv/Scripts/activate` itself works in PowerShell: it resolves to `Activate.ps1`.)
+3. **README demo step 6** recorded the good run without `--watch`, so `diff` excluded writes and its shared prefix ended at #2's `loadCart` callback, not "#2's write" as claimed. The command now uses `-w currentCart`, which produces the claimed output.
+4. **README claim** "on Windows, stdout to a pipe is lost when the process crashes" was false here: the A-101 line was printed via a pipe (3/3), a file, and under `rewind record`. Claim removed.
 
 ## Unfinished work
 
-1. M7 fresh-clone verification following README only (install → tests → all 7 demo steps).
-2. Fix whatever that verification breaks (docs or bugs only, no features); commit as M7.
-3. Rehearse the demo 3× and record a backup video (video is the user's task).
+1. Rehearse the demo 3× and record a backup video (user).
 
 ## Unresolved issues and open questions
 
 | issue | status |
 |---|---|
-| "Nine failures" reported in an earlier session | **Unknown.** No record in the repo or session notes says what they were, which suite, or which commit. See [TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md#previously-reported-nine-failures). Must be re-established by running `pytest` in M7. |
-| README test count says 40 | Consistent with a static read of `tests/` (38 functions, one parametrized ×3 → 40 items). Pass/fail not re-run. |
-| README Windows install line | Suspected bug: `python -m venv .venv && .venv/Scripts/activate` does not work in Windows PowerShell 5.1 (no `&&`; activation script is `.venv\Scripts\Activate.ps1`). Works in Git Bash only with `source`. Unverified until M7 runs it. |
+| "Nine failures" reported in an earlier session | **Not reproduced.** See [TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md#previously-reported-nine-failures). |
+| `--watch` without `npm install --prefix recorder` | The recorded program crashes at preload with Node's raw `Cannot find module 'acorn'` (run marked `crashed`). Documented prerequisite; message is not friendly. Not changed in M7 (not a regression, and improving it would be new behaviour). |
 | SQLite inside OneDrive | M0 E5b reported no lock errors (201k rows, concurrent reader). Default `REWIND_HOME` is `./.rewind`; `REWIND_HOME` override exists. No fallback to `%LOCALAPPDATA%` was implemented (the plan proposed one only if M0 failed; it passed). |
 | README says "developed on Python 3.15; 3.14 also works" | Previously reported; 3.14 path not re-verified. `pyproject.toml` requires `>=3.12`; 3.12/3.13 are untested as far as records show. |
-| README demo claims (A-101 charged $161 vs $128, line numbers 12/18/23, request numbering #3/#4) | Line numbers verified against `demo/checkout.js` source (write at line 12, `paymentConfirmed` timer at line 18, failing read at line 23). Dollar amounts and request numbers depend on `demo/prices.json` and runtime output; unverified this session. |
+| README demo claims (A-101 charged $161 vs $128, line numbers 12/18/23, request numbering #3/#4) | Verified in M7 from real runs (see TESTING_AND_VERIFICATION.md). |

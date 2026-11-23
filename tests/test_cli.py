@@ -22,6 +22,19 @@ def test_record_and_runs(tmp_path):
     assert ls.returncode == 0 and "bad" in ls.stdout and ls.stdout.index("chain.js") < ls.stdout.index("throw_timer.js")
 
 
+def test_negative_run_refs_are_not_parsed_as_options(tmp_path):
+    rw("record", "-l", "older", "--", "node", "tests/fixtures/chain.js", home=tmp_path)
+    rw("record", "-l", "newer", "--", "node", "tests/fixtures/throw_timer.js", home=tmp_path)
+    for cmd in ("timeline", "tree", "why"):
+        newest, older = rw(cmd, "-1", home=tmp_path), rw(cmd, "-2", home=tmp_path)
+        assert newest.returncode == 0 and "(newer)" in newest.stdout, cmd + newest.stdout + newest.stderr
+        assert older.returncode == 0 and "(older)" in older.stdout, cmd + older.stdout + older.stderr
+    d = rw("diff", "-2", "-1", home=tmp_path)
+    assert d.returncode == 0 and "(older)" in d.stdout and "(newer)" in d.stdout
+    assert rw("why", "-3", home=tmp_path).returncode == 2  # only 2 runs
+    assert rw("why", "-1", "-e", "1", home=tmp_path).returncode == 0  # real options still parse
+
+
 def test_record_with_watch(tmp_path):
     r = rw("record", "-w", "currentCart", "--", "node", "tests/fixtures/mutations.js", home=tmp_path)
     assert "watch=currentCart" in r.stdout and r.returncode == 1

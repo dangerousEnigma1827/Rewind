@@ -14,10 +14,10 @@ state it read, and where a failing run diverged from a good one. Every finding i
 
 ## Current state (one paragraph)
 
-Milestones M0–M6 are committed on `main`; the latest milestone commit is `ab02a7b`
-("M6: docs, demo fix patch, fresh-clone fixes"). M7 (fresh-clone verification and demo
-rehearsal) was started in an earlier session and interrupted; no record of how far it got
-exists in the repository. **M7 is not complete.** M8+ is not started and is not planned in detail.
+Milestones M0–M6 are committed on `main` (M6 = `ab02a7b`), then the handover docs (`4097ca2`),
+then `M7: fresh-clone verification fixes`. M7 verification (fresh clone, 41/41 tests, all 7 demo
+steps, P1 checks) was done on 2026-11-23 and fixed one CLI bug (`-N` run refs) plus README errors.
+The user-side demo rehearsal and backup video remain. M8+ is not started and not approved.
 
 ## Documents
 
@@ -42,8 +42,8 @@ Pre-existing docs, still authoritative and not replaced: [`README.md`](../../REA
 ## Instructions for a fresh Claude Code session
 
 1. Read this file, then `PROJECT_STATUS.md` and `NEXT_STEPS.md`. Read the others when a task touches them.
-2. Run `git status` and `git log --oneline -8` first; confirm HEAD is `ab02a7b` or the handover-docs commit on top of it. If not, the state has moved on — re-check before trusting these docs.
-3. Scope: the immediate job is **M7 only** (verification and fixing what verification breaks). Do not start M8 or add features unless the user asks.
+2. Run `git status` and `git log --oneline -8` first; confirm HEAD is the M7 commit (on top of `4097ca2`). If not, the state has moved on — re-check before trusting these docs.
+3. Scope: M7 verification is done; do not start M8 or add features unless the user approves it.
 4. User working rules (from earlier sessions):
    - work milestone by milestone, verify with real runs, commit at completed milestones;
    - never claim a capability (especially mutation tracking) that isn't verified;

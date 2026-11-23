@@ -1,6 +1,6 @@
 # Testing and verification
 
-Back to [HANDOVER.md](HANDOVER.md). **No tests were run while writing this document.** Results below are labelled by source.
+Back to [HANDOVER.md](HANDOVER.md). Originally written without running anything; the [M7 results](#m7-verification-results-2026-11-23) section records real runs.
 
 ## Test suite (verified by reading `tests/`)
 
@@ -11,15 +11,15 @@ Runner: `pytest` (config in `pyproject.toml`: `testpaths = ["tests"]`, `-p no:ca
 | `test_recorder.py` | 15 | raw stream contiguity, re-entrancy, inert without `REWIND_OUT`, causal chain + callback names + creation stacks, promise stacks on/off, sync throw context + exit code, rejection-after-await attribution, error flush survives kill, HTTP anchors, lazy AST deps, exact documented mutation set, mutation writer context, mutation cap, ESM untouched, keep-alive distinct anchors |
 | `test_store.py` | 5 functions (one parametrized ×3) = 7 items | ingest round-trip, ok/failed status, crashed + torn line, re-ingest replaces, run resolution |
 | `test_analysis.py` | 11 | request attribution on demo, describe names user code, tree pruning/folding, `short_fn`, why with watch proves overwrite, why without watch never claims a mutation, silent overcharge is hedged, sequential run clean, rejection through await, diff good/good empty, diff good/bad points at interleaving |
-| `test_cli.py` | 7 | record + runs, record with watch, friendly errors, timeline + tree on demo, why, diff, diff ignores one-sided watched writes |
+| `test_cli.py` | 8 | record + runs, `-N` run refs not parsed as options (added in M7), record with watch, friendly errors, timeline + tree on demo, why, diff, diff ignores one-sided watched writes |
 
-Static count: **38 test functions → 40 collected items expected** (the ×3 parametrization adds 2), matching README's "40 tests". Confirm with `pytest --collect-only -q`.
+Count: 39 test functions → **41 collected items** after M7 (40 before; the ×3 parametrization adds 2).
 
 Fixtures: `chain.js`, `throw_timer.js`, `reject_await.js`, `http_two.js`, `http_keepalive.js`, `mutations.js`, `many_writes.js`, `esm_watch.mjs`, `kill_after_error.js`.
 
 ## Previously reported results
 
-- README (M6): `pytest  # 40 tests`, implying a green suite at `ab02a7b`. Not re-run; the count agrees with the static count above.
+- README (M6): `pytest  # 40 tests` at `ab02a7b`. Confirmed in M7: 40 passed at `4097ca2` (docs-only on top of `ab02a7b`).
 - Each milestone commit (M1–M6) was made under the rule "tests green before each commit" (original plan). Not independently re-verified.
 
 ## M0 experiment findings (from `spikes/RESULTS.md`, previously reported)
@@ -46,23 +46,34 @@ The user reports that an earlier session saw **nine failures**. **No record of t
 - which commit/environment (main tree vs fresh clone, Python version, cwd),
 - the failing test names and messages.
 
-Suspected cause: **not determinable from available sources.** Plausible candidates worth checking first in M7, all unverified hypotheses:
-1. Fresh clone missing `npm install --prefix recorder` → every `--watch` test fails (`test_record_with_watch`, mutation tests, why-with-watch, demo-based analysis tests that record with `--watch`).
-2. `node` not on PATH inside the venv shell → every node-spawning test fails.
-3. Running pytest from a directory other than the repo root, or with a stale `REWIND_HOME` set in the environment.
-4. Timing sensitivity of the demo on a slower/loaded machine (demo uses ≥40 ms margins, which the earlier session reported as deterministic).
+M7 investigation (2026-11-23, Windows 11, Node v24.22.1, Python 3.15.2). Hypotheses tested, none gives nine:
 
-Do not cite "nine failures" as a fact about current code until reproduced.
+| condition | result |
+|---|---|
+| fresh clone, README install | 40 passed |
+| fresh clone **without** `npm install --prefix recorder` | **16 failed**, 24 passed (every `--watch` path: `Cannot find module 'acorn'`) |
+| original OneDrive working tree | 40 passed |
+| pytest run from outside the repo root | 40 passed |
+| stale `REWIND_HOME` set in the environment | 40 passed |
+| 3 repeated runs | 40 passed ×3 |
+| under CPU load (4 busy node processes) | 40 passed |
+| checkout `a1b9988` (M5) | 39 passed |
+| checkout `408d4a9` (M4) | 36 passed |
+
+Conclusion: **not reproduced.** The cause of the reported nine is unknown; it is not explained by a missing npm install (16), cwd, `REWIND_HOME`, load, or the M4/M5 code. `node` not on PATH was not tested (it would fail nearly every test, not nine).
 
 ## Interrupted M7 rehearsal
 
-Started in a previous session, interrupted; no artefacts or notes survive in the repo and the working tree was clean. Its progress and findings are unknown. See [PROJECT_STATUS.md](PROJECT_STATUS.md#m7-where-it-was-interrupted).
+Started in a previous session and interrupted; no artefacts survive. Superseded by the M7 run below.
 
-## Verification still required (M7)
+## M7 verification results (2026-11-23)
 
-1. Clean clone from git (outside OneDrive) builds per README on Windows.
-2. `pytest --collect-only -q` count (expect 40), then full `pytest` — record exact pass/fail with output.
-3. All 7 README demo steps produce the claimed output (see [NEXT_STEPS.md](NEXT_STEPS.md) for each expected claim).
-4. README install commands work in PowerShell 5.1 as written (suspected not to).
-5. Run selectors (`last`, `-N`, id prefix, label) and `--evidence` on a fresh database.
-6. Optional: Python 3.14 path, `REWIND_PROMISE_STACKS=0`.
+Fresh `git clone` into a scratch dir outside OneDrive, README install in PowerShell 5.1.
+
+- Install: `python -m venv .venv && .venv/Scripts/activate` → PowerShell parse error on `&&` (fixed in README). The two halves run separately work; `pip install -e ".[dev]"` and `npm install --prefix recorder` work as written.
+- Tests: `pytest --collect-only -q` → 40; `pytest` → 40 passed (pre-fix). After fix: 41 passed.
+- Demo steps 1–7: all reproduced as README claims, except two wording errors fixed in README (step 2 "terminal never printed", step 6 needs `-w` on the good run). Totals: bad A-101 $161, C-303 $11, B-202 crashes; good/fixed A-101 $128, B-202 $186, C-303 $11.
+- P1: run refs `last`, label and id prefix worked; `-1`/`-2` failed with "No such option" (fixed, regression test); after `--` they resolved correctly and `-7` of 6 gave "only 6 runs recorded". Unknown run → `error: no run matches '…'`, exit 2. All 12 `why --evidence` seqs and the diff's A-side seqs exist in `timeline --raw` and match their findings. Statuses: bad/nowatch `failed`, good/fixed `ok`. `rewind record` passes exit code 1 from the crashing demo, 0 from good.
+- Note: piping into PowerShell's `Select-Object -First N` gives exit 255 because PowerShell stops the pipeline; full output exits 0. Not a Rewind defect.
+
+Not verified: Python 3.12–3.14, `REWIND_PROMISE_STACKS=0`, interactive-console (TTY) output behaviour, Linux/macOS.
