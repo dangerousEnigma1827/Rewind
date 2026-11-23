@@ -8,14 +8,42 @@ import subprocess
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import typer
+import typer.rich_utils
+from rich.markup import escape
+from typer.core import TyperCommand, TyperGroup
 
-from . import RECORDER, analysis, render, store
+from . import RECORDER, __version__, analysis, render, store
 from .render import console
 
-app = typer.Typer(add_completion=False, no_args_is_help=True, rich_markup_mode="rich",
+
+def _home_shown() -> str:
+    h = Path(os.environ.get("REWIND_HOME") or Path.cwd() / ".rewind")  # same rule as store.home(), without creating it
+    try:
+        return str(h.resolve().relative_to(Path.cwd().resolve())) or "."
+    except ValueError:
+        return str(h)
+
+
+class RewindGroup(TyperGroup):
+    def format_help(self, ctx, formatter):  # `rewind` and `rewind --help` open the landing screen
+        h = Path(os.environ.get("REWIND_HOME") or Path.cwd() / ".rewind")
+        rows = store.runs(store.connect()) if (h / "rewind.db").exists() else []  # never create .rewind just by looking
+        render.landing(rows, _home_shown(), __version__)
+
+
+class RewindCommand(TyperCommand):
+    def format_help(self, ctx, formatter):
+        render.command_help(self, ctx)
+
+
+# shortcut: replaces Typer's boxed usage-error panel via its module hook; re-check if Typer renames rich_format_error.
+typer.rich_utils.rich_format_error = render.usage_error
+
+app = typer.Typer(cls=RewindGroup, add_completion=False, no_args_is_help=True, rich_markup_mode="rich",
                   help="Causal time-travel debugging for Node.js. Record a run, then ask why.")
 
 
@@ -34,7 +62,7 @@ def _run(db, ref):
         render.fail(str(e)); raise typer.Exit(2)
 
 
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+@app.command(cls=RewindCommand, context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def record(ctx: typer.Context,
            label: Optional[str] = typer.Option(None, "--label", "-l", help="Name this run (e.g. good, bad)."),
            watch: Optional[str] = typer.Option(None, "--watch", "-w", help="Comma-separated top-level CJS variables to track writes to.")):
@@ -50,7 +78,7 @@ def record(ctx: typer.Context,
     env = {**os.environ, "REWIND_OUT": str(raw), "REWIND_RUN_ID": run_id}
     if watch:
         env["REWIND_WATCH"] = watch
-    render.header(f"recording [id]{run_id}[/]  [dim]{' '.join(cmd)}[/]" + (f"  [dim]watch=[/][accent]{watch}[/]" if watch else ""))
+    render.recording(run_id, " ".join(cmd), watch)
     started, t = datetime.now().isoformat(timespec="seconds"), time.perf_counter()
     try:
         p = subprocess.Popen([node, "--require", str(RECORDER), *cmd[1:]], env=env)
@@ -63,19 +91,20 @@ def record(ctx: typer.Context,
     secs = time.perf_counter() - t
     if not raw.exists():
         render.fail("recorder produced no output (did node start?)"); raise typer.Exit(code or 1)
-    row = store.ingest(_db(), run_id, raw, label=label, cmd=cmd, started_at=started,
-                       ended_at=datetime.now().isoformat(timespec="seconds"), exit_code=code)
+    with render.working("indexing the recording"):
+        row = store.ingest(_db(), run_id, raw, label=label, cmd=cmd, started_at=started,
+                           ended_at=datetime.now().isoformat(timespec="seconds"), exit_code=code)
     render.run_summary(row, secs)
     raise typer.Exit(code)
 
 
-@app.command()
+@app.command(cls=RewindCommand)
 def runs():
     """List recorded runs, newest first."""
     rows = store.runs(_db())
     if not rows:
-        console.print("[dim]no runs yet — try[/] rewind record -- node app.js"); return
-    render.runs_table(rows)
+        console.print("  [mute]no runs yet — try[/] [bold]rewind record -- node app.js[/]"); return
+    render.runs_table(rows, _home_shown())
 
 
 def _load(ref):
@@ -85,14 +114,14 @@ def _load(ref):
 
 
 def _title(row) -> str:
-    return f"run {row['id']}" + (f" ({row['label']})" if row["label"] else "")
+    return f"run [id]{row['id']}[/]" + (f" ([label]{escape(row['label'])}[/])" if row["label"] else "")
 
 
 def _ctx_aid(e):
     return e.aid if e.kind.startswith("async.") else e.eid
 
 
-@app.command(context_settings=RUN_REF)
+@app.command(cls=RewindCommand, context_settings=RUN_REF)
 def timeline(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
              request: Optional[int] = typer.Option(None, "--request", "-r", help="Only events of request #N."),
              kind: Optional[str] = typer.Option(None, "--kind", "-k", help="Comma list: log,http,error,mutation,async,run."),
@@ -109,11 +138,12 @@ def timeline(run: Optional[str] = typer.Argument(None, help="Run id prefix, labe
             have = ", ".join(f"#{i}" for i in r.requests) or "none"
             render.fail(f"run has no request #{request} (has {have})"); raise typer.Exit(2)
         rows = [e for e in rows if r.request_of(_ctx_aid(e)) == request]
-    render.header(f"timeline · {_title(row)} · {render.plural(len(rows), 'event')} shown of {row['event_count']:,} recorded")
+    render.title("timeline", _title(row), f"{render.plural(len(rows), 'event')} shown of {row['event_count']:,} recorded")
+    console.print()
     render.timeline(r, rows)
 
 
-@app.command(context_settings=RUN_REF)
+@app.command(cls=RewindCommand, context_settings=RUN_REF)
 def tree(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
          request: Optional[int] = typer.Option(None, "--request", "-r", help="Root the tree at request #N."),
          full: bool = typer.Option(False, "--full", help="Show every async resource, including quiet and internal ones.")):
@@ -125,11 +155,12 @@ def tree(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, '
             render.fail(f"run has no request #{request}"); raise typer.Exit(2)
         root = r.requests[request].anchor
     node, pruned = analysis.build_tree(r, root, full)
-    render.header(f"async tree · {_title(row)}")
+    render.title("async tree", _title(row), "who scheduled whom")
+    console.print()
     render.tree(r, node, pruned, "main module" if root == 1 else r.requests[request].label)
 
 
-@app.command(context_settings=RUN_REF)
+@app.command(cls=RewindCommand, context_settings=RUN_REF)
 def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
         error: int = typer.Option(1, "--error", "-e", help="Which error to explain (1 = first)."),
         seq: Optional[int] = typer.Option(None, "--seq", "-s", help="Explain any event by its seq instead of an error."),
@@ -142,8 +173,9 @@ def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'l
         target, position = r.by_seq[seq], f"event seq {seq}"
     else:
         if not r.errors:
-            render.header(f"why · {_title(row)}")
-            console.print("  [ok]no errors recorded.[/] [dim]Explain any event with[/] rewind why --seq N")
+            render.title("why", _title(row))
+            console.print()
+            console.print("  [ok]●[/] no errors recorded. [mute]Explain any event with[/] [bold]rewind why --seq N[/]")
             return
         if not 1 <= error <= len(r.errors):
             render.fail(f"run has {render.plural(len(r.errors), 'error')}"); raise typer.Exit(2)
@@ -151,10 +183,10 @@ def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'l
     render.why(r, analysis.investigate(r, target), _title(row), evidence, position)
     if not r.watch and seq is None:
         console.print()
-        console.print("  [faint]tip: record with --watch <variable> to capture writes to shared state[/]")
+        console.print("  [mute]tip: record with[/] [bold]--watch <variable>[/] [mute]to capture writes to shared state[/]")
 
 
-@app.command(context_settings=RUN_REF)
+@app.command(cls=RewindCommand, context_settings=RUN_REF)
 def diff(a: str = typer.Argument(..., help="Baseline run (e.g. good)."),
          b: str = typer.Argument(..., help="Run to compare (e.g. bad)."),
          all_: bool = typer.Option(False, "--all", help="Include callbacks outside any request (harness, plumbing)."),
