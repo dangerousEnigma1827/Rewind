@@ -12,9 +12,9 @@ Runner: `pytest` (config in `pyproject.toml`: `testpaths = ["tests"]`, `-p no:ca
 | `test_store.py` | 5 functions (one parametrized ×3) = 7 items | ingest round-trip, ok/failed status, crashed + torn line, re-ingest replaces, run resolution |
 | `test_analysis.py` | 11 | request attribution on demo, describe names user code, tree pruning/folding, `short_fn`, why with watch proves overwrite, why without watch never claims a mutation, silent overcharge is hedged, sequential run clean, rejection through await, diff good/good empty, diff good/bad points at interleaving |
 | `test_cli.py` | 8 | record + runs, `-N` run refs not parsed as options (added in M7), record with watch, friendly errors, timeline + tree on demo, why, diff, diff ignores one-sided watched writes |
-| `test_render.py` | 10 | landing (no side effects, next step, exit 2), help keeps every option, usage errors, no escape codes when piped, NO_COLOR keeps structure, no overflow at 60 columns, palette contrast on black and white, console-font fallback, evidence hierarchy styling |
+| `test_render.py` | 11 | landing (no side effects, next step, exit 2), wordmark at every width (full / tight / compact below 45, one right edge, readable without colour), help keeps every option, usage errors, no escape codes when piped, NO_COLOR keeps structure, no overflow at 60 columns, palette contrast on black and white, console-font fallback, evidence hierarchy styling |
 
-Count: 39 test functions → **41 collected items** after M7 (40 before; the ×3 parametrization adds 2). The CLI visual redesign (branch `feat/cli-visual-redesign`) adds `test_render.py` → **51**.
+Count: 39 test functions → **41 collected items** after M7 (40 before; the ×3 parametrization adds 2). The CLI visual redesign (branch `feat/cli-visual-redesign`) adds `test_render.py` → **52**.
 
 Fixtures: `chain.js`, `throw_timer.js`, `reject_await.js`, `http_two.js`, `http_keepalive.js`, `mutations.js`, `many_writes.js`, `esm_watch.mjs`, `kill_after_error.js`.
 

@@ -28,11 +28,12 @@ from rich.tree import Tree
 
 from . import analysis as A
 
-PALETTE = {"uv": "#7F5AF0", "mute": "#7E7E8C", "err": "#E5484D", "ok": "#23905C", "write": "#A8741F",
-           "r1": "#2C8C99", "r2": "#C0567A", "r3": "#7D8A2E", "r4": "#5A7FC0"}
+PALETTE = {"uv": "#7F5AF0", "uv.hi": "#8D6CFF", "uv.lo": "#6A48D8", "mute": "#7E7E8C", "err": "#E5484D",
+           "ok": "#23905C", "write": "#A8741F", "r1": "#2C8C99", "r2": "#C0567A", "r3": "#7D8A2E", "r4": "#5A7FC0"}
 P = PALETTE
 THEME = Theme({
-    "uv": P["uv"], "uv.b": f"bold {P['uv']}", "id": P["uv"], "mute": P["mute"], "hyp": f"italic {P['mute']}",
+    "uv": P["uv"], "uv.b": f"bold {P['uv']}", "uv.hi": P["uv.hi"], "uv.lo": P["uv.lo"],
+    "id": P["uv"], "mute": P["mute"], "hyp": f"italic {P['mute']}",
     "obs": "bold", "fn": "bold", "label": "bold", "loc": "none",
     "err": f"bold {P['err']}", "err.t": P["err"], "ok": P["ok"], "write": P["write"],
     "r1": P["r1"], "r2": P["r2"], "r3": P["r3"], "r4": P["r4"],
@@ -164,15 +165,52 @@ def _ref(row) -> str:
     return row["label"] or row["id"]
 
 
+TAGLINE = "Postmortem debugging for asynchronous Node.js."
+# The wordmark, as 6-pixel-tall bitmaps drawn with half blocks (3 terminal rows). Only █ ▀ ▄ are used:
+# they exist in Lucida Console, Consolas and Cascadia Mono, so no console font shows boxes.
+LETTERS = {
+    "R": ["####.", "#...#", "####.", "#.#..", "#..#.", "#...#"],
+    "E": ["#####", "#....", "####.", "#....", "#....", "#####"],
+    "W": ["#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"],
+    "I": ["###", ".#.", ".#.", ".#.", ".#.", "###"],
+    "N": ["#...#", "##..#", "#.#.#", "#..##", "#...#", "#...#"],
+    "D": ["####.", "#...#", "#...#", "#...#", "#...#", "####."],
+}
+
+
+def _wordmark(word: str = "REWIND", gap: int = 2) -> list[str]:
+    px = [(" " * gap).join(LETTERS[c][r] for c in word).replace(" ", ".") for r in range(6)]
+    cell = {("#", "#"): "█", ("#", "."): "▀", (".", "#"): "▄"}
+    return ["".join(cell.get(p, " ") for p in zip(top, bot)) for top, bot in zip(px[0::2], px[1::2])]
+
+
+WORDMARK = _wordmark()          # 38 cells
+WORDMARK_TIGHT = _wordmark(gap=1)  # 33 cells, for 45-47 column terminals
+
+
+def _splash(version: str):
+    """The product name first. Wordmark rows step from light to deep violet (UV light from above); the version
+    sits on its baseline, and the ruler's ◆, the version and the tagline all end in the same column."""
+    room = width() - 2
+    # 44 usable cells = a 45-column terminal (Rich keeps the last column free on Windows); below that, the compact mark
+    fits = [m for m in (WORDMARK, WORDMARK_TIGHT) if len(m[0]) + 2 + len(version) <= room] if width() >= 44 else []
+    mark = fits[0] if fits else None
+    span = min(max(len(mark[0]) + 2 + len(version) if mark else 0, len(TAGLINE)), room)
+    console.print()
+    if mark:
+        for i, (row, tone) in enumerate(zip(mark, ("uv.hi", "uv", "uv.lo"))):
+            tail = f"{' ' * (span - len(row) - len(version))}[mute]{version}[/]" if i == 2 else ""
+            console.print(f"  [{tone}]{row}[/]{tail}")
+    else:  # below 45 columns: the compact mark, nothing wraps
+        console.print(f"  [uv.b]◂◂[/] [bold]r e w i n d[/]  [mute]{version}[/]")
+    console.print("  [mute]" + "".join("┼" if i % 8 == 7 else "─" for i in range(span - 1)) + "[/][uv]◆[/]")
+    console.print(Padding(Text(TAGLINE, style="mute"), (0, 0, 0, 2)))  # wraps with its indent when narrow
+    console.print()
+
+
 def landing(rows: list, home: str, version: str):
-    """`rewind` with no command: wordmark, what is recorded here, the workflows, and a next step."""
-    n = min(width() - 4, 72)
-    word = "◂◂ r e w i n d"
-    console.print()
-    console.print(f"  [uv.b]◂◂[/] [bold]r e w i n d[/]{' ' * max(n - cell_len(word) - len(version), 2)}[mute]{version}[/]")
-    console.print("  [mute]" + "".join("┼" if i % 8 == 7 else "─" for i in range(n - 1)) + "[/][uv]◆[/]")
-    console.print("  [mute]postmortem debugging for asynchronous node.js[/]")
-    console.print()
+    """`rewind` with no command: the wordmark, what is recorded here, the workflows, and a next step."""
+    _splash(version)
 
     def block(*lines):  # every block shares one 8-cell label column, so content always starts at the same place
         g = Table.grid(padding=(0, 3))
@@ -193,15 +231,21 @@ def landing(rows: list, home: str, version: str):
     else:
         block(("here", "[mute]no runs recorded yet[/]"), ("", f"[mute]{escape(home)}[/]"))
 
+    wide = width() >= 64  # narrower: each description goes under its command instead of in a squeezed column
     g = Table.grid(padding=(0, 3))
     g.add_column(style="mute", no_wrap=True, width=8)
-    g.add_column(style="bold", no_wrap=True, width=8)
-    g.add_column(style="mute", no_wrap=True, width=14)
+    if wide:
+        g.add_column(style="bold", no_wrap=True, width=8)
+        g.add_column(style="mute", no_wrap=True, width=14)
     g.add_column(style="mute", overflow="fold")
     for name, cmds in GROUPS:
         for i, (cmd, args, desc) in enumerate(cmds):
-            g.add_row(name if i == 0 else "", cmd, escape(args), desc)
-        g.add_row("", "", "", "")
+            label_ = name if i == 0 else ""
+            if wide:
+                g.add_row(label_, cmd, escape(args), desc)
+            else:
+                g.add_row(label_, f"[bold]{cmd}[/] {escape(args)}\n{desc}")
+        g.add_row(*[""] * len(g.columns))
     console.print(Padding(g, (0, 0, 0, 2)))
 
     if not rows:

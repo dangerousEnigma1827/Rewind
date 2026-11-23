@@ -111,5 +111,5 @@ Line numbers in your stack traces are unchanged. A variable written more than `R
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The experiments behind each design decision are in [spikes/RESULTS.md](spikes/RESULTS.md).
 
 ```sh
-pytest          # 51 tests; most run real node processes end to end
+pytest          # 52 tests; most run real node processes end to end
 ```

@@ -12,7 +12,8 @@ def test_landing_without_runs_creates_nothing(tmp_path):
     home = tmp_path / "nothing-here"
     r = rw(home=home)
     assert r.returncode == 2  # unchanged: bare `rewind` exited 2 before the redesign too
-    assert "r e w i n d" in r.stdout and "record your first run" in r.stdout and "no runs recorded yet" in r.stdout
+    assert render.WORDMARK[0] in r.stdout and render.TAGLINE in r.stdout
+    assert "record your first run" in r.stdout and "no runs recorded yet" in r.stdout
     assert not home.exists()  # looking must not create .rewind
     for cmd in ("record", "runs", "timeline", "tree", "why", "diff"):
         assert f" {cmd} " in r.stdout
@@ -43,11 +44,11 @@ def test_usage_errors_keep_message_and_exit_code(tmp_path):
         assert r.returncode == 2 and "error:" in r.stderr and msg in r.stderr and "┌" not in r.stderr
 
 
-def _vt_console(monkeypatch, no_color: bool):
+def _vt_console(monkeypatch, no_color: bool, width: int = 100):
     monkeypatch.setenv("NO_COLOR", "1" if no_color else "")  # Rich reads it at construction; empty = unset
     buf = io.StringIO()  # read what is actually written: export_text() would bypass NO_COLOR stripping
     con = Console(file=buf, theme=render.THEME, force_terminal=True, color_system="truecolor", legacy_windows=False,
-                  width=100, highlight=False)
+                  width=width, highlight=False)
     monkeypatch.setattr(render, "console", con)
     return buf
 
@@ -66,7 +67,26 @@ def test_no_color_keeps_structure_and_drops_colour(monkeypatch):
         render.findings(fs, evidence=False)
         out = buf.getvalue()
         assert bool(COLOR.search(out)) is not no_color
-        assert all(s in out for s in ("◂◂", "●", "◆", "? inferred", "capture", "next"))
+        assert all(s in out for s in (*render.WORDMARK, "●", "◆", "? inferred", "capture", "next"))
+
+
+def test_wordmark_fits_every_width_and_falls_back_below_45(monkeypatch):
+    plain = re.compile(r"\x1b\[[\d;]*m")
+    for width, expect in ((120, render.WORDMARK), (80, render.WORDMARK), (60, render.WORDMARK),
+                          (46, render.WORDMARK_TIGHT), (44, render.WORDMARK_TIGHT), (43, None), (30, None)):
+        buf = _vt_console(monkeypatch, no_color=True, width=width)
+        render.landing([], ".rewind", "0.1.0")
+        lines = plain.sub("", buf.getvalue()).splitlines()
+        assert max(len(l.rstrip()) for l in lines) <= width, width
+        if expect is None:
+            assert "◂◂ r e w i n d  0.1.0" in lines[1] and "█" not in buf.getvalue(), width
+            continue
+        assert [l.strip() for l in lines[1:3]] == [r.strip() for r in expect[:2]], width  # readable without colour
+        version_end = lines[3].rstrip().index("0.1.0") + len("0.1.0")
+        assert lines[4].rstrip().endswith("◆") and len(lines[4].rstrip()) == version_end, width  # version ends on the ◆
+        if width >= 48:
+            assert lines[5].rstrip() == "  " + render.TAGLINE and len(lines[5].rstrip()) == version_end  # one right edge
+    assert len(render.WORDMARK[0]) == 38 and len({len(r) for r in render.WORDMARK + render.WORDMARK_TIGHT}) == 2
 
 
 def test_narrow_terminal_never_overflows(tmp_path):
