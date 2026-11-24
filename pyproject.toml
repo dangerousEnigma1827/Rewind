@@ -1,7 +1,7 @@
 [project]
 name = "rewind"
 version = "0.1.0"
-description = "Causal time-travel debugging for Node.js"
+description = "Postmortem debugging for Node.js applications: record a run, then analyse its execution history and causes"
 requires-python = ">=3.12"
 dependencies = ["typer>=0.12", "rich>=13"]
 

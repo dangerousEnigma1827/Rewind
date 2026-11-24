@@ -1,4 +1,4 @@
-"""Rewind: causal time-travel debugging for Node.js."""
+"""Rewind: postmortem debugging for Node.js applications."""
 from pathlib import Path
 
 __version__ = "0.1.0"

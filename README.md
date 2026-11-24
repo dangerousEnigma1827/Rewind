@@ -1,7 +1,7 @@
 <h1 align="center">◂◂ Rewind</h1>
 
 <p align="center">
-  <strong>Postmortem debugging for asynchronous Node.js.</strong><br/>
+  <strong>Postmortem debugging for Node.js applications.</strong><br/>
   Record a run once, then ask <em>why</em> something happened, not just <em>what</em> broke.
 </p>
 
@@ -226,7 +226,7 @@ rewind/       Python side: store.py (SQLite ingest, run lookup), analysis.py (at
 demo/         the Phantom Discount demo: checkout.js, traffic.js, prices.json, fix.patch
 tests/        pytest suite; most tests run real node processes end to end
 spikes/       the feasibility experiments (E0–E7) behind each design decision, with results
-docs/         ARCHITECTURE.md, and handover/: status, engineering log, testing record
+docs/         ARCHITECTURE.md, assets/ (the architecture diagram), and handover/: status, engineering log, testing record
 ```
 
 ---
@@ -256,8 +256,8 @@ Also checked:
 ## Limitations
 
 Rewind records the **causal skeleton** of a run: async lifecycle, HTTP requests, logs, errors and watched writes.
-It is not a full time-travel debugger. It doesn't capture every function call or variable value, can't step
-backwards or set breakpoints, and has no web UI.
+It records execution facts as they happen and analyses them afterwards. It doesn't replay execution or step
+backwards, doesn't capture every function call or variable value, can't set breakpoints, and has no web UI.
 
 **What `--watch` sees.** `--watch currentCart` rewrites CommonJS files as they load, so every *syntactic* write to
 a watched variable declared at the top level of that file is recorded. That covers:

@@ -165,7 +165,7 @@ def _ref(row) -> str:
     return row["label"] or row["id"]
 
 
-TAGLINE = "Postmortem debugging for asynchronous Node.js."
+TAGLINE = "Postmortem debugging for Node.js applications."
 # The wordmark, as 6-pixel-tall bitmaps drawn with half blocks (3 terminal rows). Only █ ▀ ▄ are used:
 # they exist in Lucida Console, Consolas and Cascadia Mono, so no console font shows boxes.
 LETTERS = {

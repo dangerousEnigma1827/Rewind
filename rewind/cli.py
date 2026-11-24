@@ -44,7 +44,7 @@ class RewindCommand(TyperCommand):
 typer.rich_utils.rich_format_error = render.usage_error
 
 app = typer.Typer(cls=RewindGroup, add_completion=False, no_args_is_help=True, rich_markup_mode="rich",
-                  help="Causal time-travel debugging for Node.js. Record a run, then ask why.")
+                  help="Postmortem debugging for Node.js applications. Record a run, then ask why.")
 
 
 # Click would reject a `-N` run ref ("No such option: -1"); pass unknown dash-tokens through as the run argument.
