@@ -304,6 +304,12 @@ The AST dependencies load only when `--watch` is used.
 
 ---
 
+## License
+
+Rewind is released under the [MIT License](LICENSE).
+
+---
+
 <p align="center">
   Built for <strong>CODEFESTTHON 2026</strong>
 </p>
