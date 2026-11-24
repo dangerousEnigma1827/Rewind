@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" role="img" aria-labelledby="title desc">
+  <title id="title">Rewind architecture</title>
+  <desc id="desc">A Node.js application runs with the Rewind recorder preloaded. The recorder writes raw NDJSON events synchronously; the file is kept as ground truth. After the Node process exits, Python ingests it into SQLite (WAL). The analysis engine derives async relationships, request attribution, timeline and tree, why and diff, which the Rewind CLI presents. The Node.js side only records facts; all interpretation happens in Python.</desc>
+
+  <!-- Palette: edit here. amber = Node / recorded facts, violet = Python / interpretation. -->
+  <style>
+    .bg      { fill: #0b0b10; }
+    .panel   { fill: #111118; stroke: #24242e; stroke-width: 1.5; }
+    .box     { fill: #16161f; stroke: #2c2c38; stroke-width: 1.5; }
+    .box-n   { stroke: #4a4330; }
+    .box-p   { stroke: #3d3460; }
+    .well    { fill: #0d0d13; stroke: #22222b; stroke-width: 1; }
+    .rule    { stroke: #262630; stroke-width: 1; }
+    .sans    { font-family: Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
+    .mono    { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; }
+    .text    { fill: #e7e5ee; }
+    .muted   { fill: #8d8a9c; }
+    .dim     { fill: #5f5c6e; }
+    .amber   { fill: #d4b85a; }
+    .violet  { fill: #b4a2f8; }
+    .label   { font-size: 15px; font-weight: 600; letter-spacing: 2.5px; }
+    .h       { font-size: 25px; font-weight: 600; }
+    .body    { font-size: 17px; }
+    .small   { font-size: 15px; }
+    .code    { font-size: 16px; }
+    .arrow   { fill: none; stroke: #8a84a6; stroke-width: 2; marker-end: url(#head); }
+    .chip    { fill: #1d1a2c; stroke: #4b3f82; stroke-width: 1.2; }
+    .pill    { fill: #2a2617; stroke: #6b5d2c; stroke-width: 1; }
+  </style>
+  <defs>
+    <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8a84a6"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1920" height="1080"/>
+
+  <!-- ===== Header ===== -->
+  <g transform="translate(80,70)">
+    <!-- rewind mark: two left-pointing triangles -->
+    <path d="M14,0 L0,9 L14,18 z M30,0 L16,9 L30,18 z" fill="#b4a2f8"/>
+  </g>
+  <text x="124" y="86" class="mono violet" font-size="22">rewind</text>
+  <text x="212" y="86" class="mono muted" font-size="22">· architecture</text>
+  <text x="80" y="152" class="sans text" font-size="40" font-weight="600">The Node.js side <tspan class="amber">only records facts.</tspan> <tspan class="violet">All interpretation</tspan> happens in Python.</text>
+
+  <!-- ===== Node.js process (records) ===== -->
+  <rect class="panel" x="80" y="210" width="640" height="790" rx="16"/>
+  <text x="112" y="256" class="sans label amber">NODE.JS PROCESS</text>
+  <text x="688" y="256" class="sans small muted" text-anchor="end">records facts</text>
+
+  <!-- Application -->
+  <rect class="box box-n" x="112" y="290" width="576" height="180" rx="12"/>
+  <text x="140" y="344" class="mono amber" font-size="22">{ }</text>
+  <text x="186" y="344" class="sans h text">Node.js application</text>
+  <text x="140" y="392" class="sans body text">Your application code</text>
+  <text x="140" y="428" class="sans small muted">HTTP requests · timers · promises · fs I/O</text>
+
+  <path class="arrow" d="M400,470 V522"/>
+  <text x="418" y="502" class="sans small muted">observed in-process</text>
+
+  <!-- Recorder -->
+  <rect class="box box-n" x="112" y="530" width="576" height="372" rx="12"/>
+  <circle cx="149" cy="578" r="10" fill="none" stroke="#d4b85a" stroke-width="1.5"/>
+  <circle cx="149" cy="578" r="5" fill="#d4b85a"/>
+  <text x="176" y="587" class="sans h text">Recorder</text>
+  <text x="660" y="586" class="mono small muted" text-anchor="end">node --require recorder.js</text>
+  <line class="rule" x1="140" y1="612" x2="660" y2="612"/>
+
+  <text x="140" y="652" class="mono code text">async_hooks</text>
+  <text x="414" y="652" class="sans small muted">async resource tree · callbacks</text>
+  <text x="140" y="696" class="mono code text">console</text>
+  <text x="414" y="696" class="sans small muted">logs · console.error(err)</text>
+  <text x="140" y="740" class="mono code text">http.Server</text>
+  <text x="414" y="740" class="sans small muted">one async scope per request</text>
+  <text x="140" y="784" class="mono code text">uncaughtExceptionMonitor</text>
+  <text x="414" y="784" class="sans small muted">uncaught errors · rejections</text>
+  <text x="140" y="828" class="mono code text">--watch</text>
+  <rect class="pill" x="222" y="811" width="64" height="24" rx="12"/>
+  <text x="254" y="828" class="sans amber" font-size="13" text-anchor="middle">opt-in</text>
+  <text x="414" y="828" class="sans small muted">writes to named variables</text>
+
+  <line class="rule" x1="140" y1="852" x2="660" y2="852"/>
+  <text x="400" y="882" class="sans small amber" text-anchor="middle">Captures execution facts — performs no causal analysis</text>
+
+  <text x="400" y="958" class="mono small muted" text-anchor="middle">launched by  rewind record -- node app.js</text>
+
+  <!-- ===== On disk: raw NDJSON ===== -->
+  <text x="950" y="256" class="sans label muted" text-anchor="middle">ON DISK</text>
+
+  <path class="arrow" d="M688,660 H806"/>
+  <text x="749" y="648" class="mono muted" font-size="13" text-anchor="middle">writeSync</text>
+
+  <rect class="box" x="810" y="520" width="280" height="300" rx="12"/>
+  <!-- file icon -->
+  <path d="M938,546 h18 l10,10 v26 h-28 z M956,546 v10 h10" fill="none" stroke="#8d8a9c" stroke-width="1.5" stroke-linejoin="round"/>
+  <text x="950" y="618" class="sans text" font-size="22" font-weight="600" text-anchor="middle">Raw NDJSON</text>
+  <text x="950" y="646" class="mono muted" font-size="13" text-anchor="middle">.rewind/runs/&lt;id&gt;.ndjson</text>
+  <rect class="well" x="830" y="664" width="240" height="82" rx="6"/>
+  <text x="844" y="688" class="mono muted" font-size="11">{"seq":41,"kind":"async.init",…}</text>
+  <text x="844" y="710" class="mono muted" font-size="11">{"seq":42,"kind":"http.in",…}</text>
+  <text x="844" y="732" class="mono muted" font-size="11">{"seq":43,"kind":"log",…}</text>
+  <text x="950" y="776" class="sans small text" text-anchor="middle">one event per line</text>
+  <text x="950" y="800" class="sans small amber" text-anchor="middle">kept as ground truth</text>
+
+  <!-- ===== Python (interprets) ===== -->
+  <rect class="panel" x="1180" y="210" width="660" height="790" rx="16"/>
+
+  <!-- drawn after the Python panel so the arrowhead sits on top of it -->
+  <path class="arrow" d="M950,520 V370 H1208"/>
+  <text x="966" y="446" class="mono violet" font-size="14">ingest</text>
+  <text x="966" y="468" class="sans muted" font-size="14">after node exits</text>
+  <text x="1212" y="256" class="sans label violet">PYTHON</text>
+  <text x="1808" y="256" class="sans small muted" text-anchor="end">interprets</text>
+
+  <!-- Store -->
+  <rect class="box box-p" x="1212" y="290" width="596" height="160" rx="12"/>
+  <!-- database icon -->
+  <g fill="none" stroke="#b4a2f8" stroke-width="1.5">
+    <ellipse cx="1252" cy="330" rx="13" ry="5"/>
+    <path d="M1239,330 v22 a13,5 0 0 0 26,0 v-22 M1239,341 a13,5 0 0 0 26,0"/>
+  </g>
+  <text x="1282" y="345" class="sans h text">Store</text>
+  <text x="1780" y="344" class="mono small muted" text-anchor="end">rewind/store.py</text>
+  <text x="1240" y="394" class="sans body text">SQLite in WAL mode · <tspan class="mono" font-size="15">.rewind/rewind.db</tspan></text>
+  <text x="1240" y="428" class="sans small muted">runs + events, one transaction per run, raw path recorded</text>
+
+  <path class="arrow" d="M1510,450 V492"/>
+
+  <!-- Analysis engine -->
+  <rect class="box box-p" x="1212" y="500" width="596" height="300" rx="12"/>
+  <path d="M1240,544 l10,-10 l10,10 l-10,10 z" fill="none" stroke="#b4a2f8" stroke-width="1.6"/>
+  <text x="1274" y="553" class="sans h text">Analysis engine</text>
+  <text x="1780" y="552" class="mono small muted" text-anchor="end">rewind/analysis.py</text>
+  <line class="rule" x1="1240" y1="578" x2="1780" y2="578"/>
+
+  <text x="1240" y="618" class="sans body text" font-weight="600">Async relationships</text>
+  <text x="1470" y="618" class="sans small muted">tree from init / trigger ids</text>
+  <text x="1240" y="656" class="sans body text" font-weight="600">Request attribution</text>
+  <text x="1470" y="656" class="sans small muted">walk trigger links to the request</text>
+  <text x="1240" y="694" class="sans body text" font-weight="600">Timeline &amp; tree</text>
+  <text x="1470" y="694" class="sans small muted">story events; empty hops folded</text>
+  <text x="1240" y="732" class="sans body text" font-weight="600">Error investigation</text>
+  <text x="1470" y="732" class="sans small muted">observed · derived · inferred</text>
+  <text x="1240" y="770" class="sans body text" font-weight="600">Execution comparison</text>
+  <text x="1470" y="770" class="sans small muted">align runs · first divergence</text>
+
+  <path class="arrow" d="M1510,800 V842"/>
+
+  <!-- CLI -->
+  <rect class="box box-p" x="1212" y="850" width="596" height="118" rx="12"/>
+  <rect x="1240" y="886" width="30" height="24" rx="4" fill="none" stroke="#b4a2f8" stroke-width="1.5"/>
+  <path d="M1246,893 l5,5 l-5,5 M1254,904 h8" fill="none" stroke="#b4a2f8" stroke-width="1.5" stroke-linecap="round"/>
+  <text x="1284" y="900" class="sans h text">Rewind CLI</text>
+  <text x="1284" y="932" class="mono muted" font-size="14">cli.py · render.py</text>
+
+  <g class="mono" font-size="17" text-anchor="middle">
+    <rect class="chip" x="1448" y="890" width="112" height="38" rx="8"/>
+    <text x="1504" y="915" class="violet">timeline</text>
+    <rect class="chip" x="1572" y="890" width="72" height="38" rx="8"/>
+    <text x="1608" y="915" class="violet">tree</text>
+    <rect class="chip" x="1656" y="890" width="64" height="38" rx="8"/>
+    <text x="1688" y="915" class="violet">why</text>
+    <rect class="chip" x="1732" y="890" width="64" height="38" rx="8"/>
+    <text x="1764" y="915" class="violet">diff</text>
+  </g>
+
+  <!-- ===== Footer ===== -->
+  <text x="960" y="1044" class="sans small muted" text-anchor="middle">Storage never drops events; views filter.   ·   Variable writes are recorded only for names passed to --watch.</text>
+</svg>

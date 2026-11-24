@@ -1,0 +1,31 @@
+%% Rewind architecture. Source of truth: docs/ARCHITECTURE.md.
+%% The Node.js side only records facts. All interpretation happens in Python.
+flowchart LR
+    subgraph NODE["Node.js process · records facts"]
+        direction TB
+        APP["<b>Node.js application</b><br/>your code · HTTP requests · timers · promises · fs I/O"]
+        REC["<b>Recorder</b> (node --require recorder.js)<br/>async_hooks · console · http.Server<br/>uncaughtExceptionMonitor · --watch (opt-in)<br/><i>captures facts, no causal analysis</i>"]
+        APP -- observed in-process --> REC
+    end
+
+    RAW[("<b>Raw NDJSON</b><br/>.rewind/runs/&lt;id&gt;.ndjson<br/>one event per line · kept as ground truth")]
+
+    subgraph PY["Python · interprets"]
+        direction TB
+        STORE[("<b>Store</b> · rewind/store.py<br/>SQLite (WAL) · .rewind/rewind.db")]
+        ANA["<b>Analysis engine</b> · rewind/analysis.py<br/>async relationships · request attribution<br/>timeline &amp; tree · why · diff"]
+        CLI["<b>Rewind CLI</b><br/>timeline · tree · why · diff"]
+        STORE --> ANA --> CLI
+    end
+
+    REC -- writeSync --> RAW
+    RAW -- ingest after node exits --> STORE
+
+    classDef nodeSide fill:#16161f,stroke:#d4b85a,color:#e7e5ee
+    classDef py fill:#16161f,stroke:#b4a2f8,color:#e7e5ee
+    classDef disk fill:#16161f,stroke:#8d8a9c,color:#e7e5ee
+    class APP,REC nodeSide
+    class STORE,ANA,CLI py
+    class RAW disk
+    style NODE fill:#111118,stroke:#4a4330,color:#d4b85a
+    style PY fill:#111118,stroke:#3d3460,color:#b4a2f8
