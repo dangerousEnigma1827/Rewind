@@ -159,6 +159,7 @@ GROUPS = (("capture", (("record", "-- node app.js", "run a program under the rec
                        ("tree", "<run>", "who scheduled whom"))),
           ("explain", (("why", "<run>", "why an error (or any event) happened"),
                        ("diff", "<a> <b>", "where two executions part ways"))))
+# shortcut: `pending` is not listed: the landing screen is exactly 80x24 (B10). Regroup the rows to add commands.
 
 
 def _ref(row) -> str:
@@ -378,7 +379,9 @@ def event_text(run, e) -> str:
         return f"{escape(run.describe(e.aid))} [mute]fired · scheduled at[/] [loc]{escape(A.where(run.site(e.aid)))}[/]"
     if e.kind == "async.init":
         return f"{escape(run.describe(e.aid))} [mute]created at[/] [loc]{escape(A.where(A.user_frame(e.stack)))}[/]"
-    if e.kind in ("async.after", "async.resolve"):
+    if e.kind == "http.abort":
+        return f"[err.t]closed before a response[/] {escape(e.name or '')} [mute]{d.get('ms', 0):.1f}ms[/]"
+    if e.kind in ("async.after", "async.resolve", "async.cancel"):
         return f"[mute]{escape(run.describe(e.aid))}[/]"
     if e.kind == "mutation":
         return (f"[fn]{escape(e.name + d.get('path', ''))}[/] {escape(d.get('op', ''))} "
@@ -515,6 +518,17 @@ def why(run, inv, title_: str, evidence: bool, position: str):
             rows += [m for m in run.events if m.kind == "mutation" and req.inbound.seq < m.seq < e.seq
                      and run.request_of(m.eid) not in (req.id,) and m.seq not in {r.seq for r in rows}]
         timeline(run, sorted(rows + ([e] if e not in rows else []), key=lambda x: x.seq), show_context=False)
+
+
+def pending(rep, title_: str, evidence: bool):
+    """Requests without a response and unfinished operations, as graded findings."""
+    open_ = sum(s == "unresolved" for s in rep.states.values())
+    meta = (f"{plural(open_, 'request')} without a response · {plural(len(rep.ops), 'unfinished operation')}" if rep.complete
+            else "recording incomplete")
+    title("pending", title_, meta)
+    console.print()
+    section("findings", LEGEND)
+    findings(rep.findings, evidence)
 
 
 def _diff_line(mark: str, style: str, tok: str, seq: int | None):

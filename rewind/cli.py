@@ -187,6 +187,14 @@ def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'l
 
 
 @app.command(cls=RewindCommand, context_settings=RUN_REF)
+def pending(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
+            evidence: bool = typer.Option(False, "--evidence", help="Show the event seqs backing every finding.")):
+    """What never finished: requests without a response, and operations from your code that never ran or settled."""
+    row, r = _load(run)
+    render.pending(analysis.pending(r), _title(row), evidence)
+
+
+@app.command(cls=RewindCommand, context_settings=RUN_REF)
 def diff(a: str = typer.Argument(..., help="Baseline run (e.g. good)."),
          b: str = typer.Argument(..., help="Run to compare (e.g. bad)."),
          all_: bool = typer.Option(False, "--all", help="Include callbacks outside any request (harness, plumbing)."),

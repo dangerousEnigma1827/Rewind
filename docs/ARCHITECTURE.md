@@ -41,7 +41,7 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 |---|---|
 | `seq` | total order within the run |
 | `t` | µs since recorder start |
-| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `log` `http.in` `http.out` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` `source` |
+| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `async.cancel` `log` `http.in` `http.out` `http.abort` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` `source` |
 | `eid` | executionAsyncId at emission |
 | `aid`, `tid` | resource id and trigger id (async events; `http.in` anchors) |
 | `type`, `name` | resource type and callback name; log text, request line, error message, variable name |
@@ -80,6 +80,7 @@ need it are left out rather than computed from the wrong code. Runs ingested bef
   - a race explanation (inferred, citing those seqs)
 
   Without `--watch`, it can only point out module-level names on the failing line and recommend `--watch`. It never claims a write.
+- **`pending(run)`.** This is `pending`. It works only from lifecycle events already in the stream: `http.in`/`http.out`, `http.abort` (response closed before `finish`), `async.init` (Timeout inits carry `data.delay`), `async.before`, `async.resolve` (fires for rejections too) and `async.cancel` (the recorder wraps `clearTimeout`/`clearInterval`/`clearImmediate`, mapping the timer object to its aid with a WeakMap). Absence is evidence only in a complete recording (`run.end`, or `run.signal`, which flushes, and no torn lines). Request states are completed / failed / cancelled / unresolved. Unfinished user-created operations are derived. "Likely stalled" is inferred, and never after an uncaught error.
 - **`diff(a, b)`.**
   - Tokens are request-tagged steps with ids and times removed: effectful callback firings (`site` and description), requests, logs, writes (location and op, not values), errors, and exit.
   - Callbacks with no observable effect are excluded, because Node's HTTP date-cache timer fires nondeterministically.

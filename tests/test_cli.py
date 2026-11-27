@@ -85,6 +85,14 @@ def test_diff_ignores_writes_watched_in_only_one_run(tmp_path):
     assert "next, B does: #3 http.in POST /order" in d.stdout  # same divergence as with matching --watch
 
 
+def test_pending_cli(tmp_path):
+    rw("record", "-l", "stall", "--", "node", "tests/fixtures/stall.js", home=tmp_path)
+    p = rw("pending", "stall", "--evidence", home=tmp_path)
+    assert p.returncode == 0 and "recording complete" in p.stdout and "GET /hang likely stalled" in p.stdout
+    assert "seq " in p.stdout and "2 requests without a response" in p.stdout
+    assert rw("pending", "nope", home=tmp_path).returncode == 2
+
+
 def test_why_uses_the_source_that_ran_not_the_edited_file(tmp_path):
     app, home = tmp_path / "app", tmp_path / "home"
     shutil.copytree(ROOT / "demo", app)

@@ -15,6 +15,15 @@ Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. C
 | `rewind tree [RUN]` | `-r/--request N`, `--full` | Async causality tree ("who scheduled whom"). Quiet branches pruned and internal hops folded unless `--full`; reports how much it hid. |
 | `rewind why [RUN]` | `-e/--error N` (default 1), `-s/--seq SEQ`, `--evidence` | Causal investigation of error N, or of any event by seq. |
 | `rewind diff A B` | `--all`, `--evidence` | Aligns two runs and finds the first divergence. `--all` includes callbacks outside any request (harness/plumbing). |
+| `rewind pending [RUN]` | `--evidence` | What never finished: requests without a response and the unfinished operations they waited on. Not on the landing screen, which is at its 80×24 limit. |
+
+## Unfinished work (`pending`)
+
+- **Completeness first.** A recording is complete only if it reached `run.end`, or a `run.signal` (which flushes every buffered event), and ingest skipped no torn lines. In an incomplete recording, missing events prove nothing: requests without a recorded response are listed with "the recording is incomplete", and no operation or stall is claimed.
+- **Requests:** ● `responded 5xx` (failed); ● the connection closed before a response finished (`http.abort`: cancelled by the client); ◆ arrived but no response was recorded, with the reason taken from how the run ended (uncaught error, signal, or exit code).
+- **Unfinished operations** (complete recordings only, created from user code): ◆ promises with no `async.resolve` (which fires for rejections too), and timers, immediates, ticks and fs callbacks that never fired and weren't cleared (`async.cancel`). Timers report whether they were overdue ("never ran") or "not due yet" (from the recorded delay). Listed for unanswered requests and work outside any request; leftovers of requests that already finished are only counted.
+- **Inference:** ? "likely stalled", naming the most recent unfinished operation the request was waiting on; or, if there was none, a handler that may have returned without responding. Never after an uncaught error: work left unfinished by a crash is a consequence, not a stall.
+- Not judged: other resource types (sockets, DNS, child processes), unref'd timers (they show as "not due yet" or "never ran" like any other), timers cleared by numeric id or by `AbortSignal`, and `timeout.close()`.
 
 ## Causal investigation (`why`)
 

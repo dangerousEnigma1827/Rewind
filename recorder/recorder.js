@@ -84,18 +84,35 @@ if (OUT && !globalThis.__rewind) {
   function guarded(fn) { if (inHook) return; inHook = true; try { fn(); } finally { inHook = false; } }
 
   // ---- async lifecycle ------------------------------------------------------
+  const timerAid = new WeakMap(); // Timeout/Immediate object -> aid, so a clear can name what it cancelled
   ah.createHook({
     init(aid, type, tid, res) {
+      if ((type === 'Timeout' || type === 'Immediate') && res) timerAid.set(res, aid);
       guarded(() => {
         const cb = res && (res._onTimeout || res._onImmediate);
         emit('async.init', { aid, tid, type, name: cb ? (cb.name || '<anonymous>') : null,
-          stack: type !== 'PROMISE' || PROMISE_STACKS ? callsites() : null });
+          stack: type !== 'PROMISE' || PROMISE_STACKS ? callsites() : null,
+          ...(type === 'Timeout' && res ? { data: { delay: res._idleTimeout } } : {}) }); // due time: overdue vs not yet due
       });
     },
     before(aid) { guarded(() => emit('async.before', { aid })); },
     after(aid) { guarded(() => emit('async.after', { aid })); },
     promiseResolve(aid) { guarded(() => emit('async.resolve', { aid })); },
   }).enable();
+
+  // A cleared timer never fires, which would otherwise look exactly like one still pending when the run ended.
+  // shortcut: clears by numeric id (`clearTimeout(+t)`) and AbortSignal-cancelled timers/promises aren't seen; add if needed.
+  const timers = require('timers');
+  for (const name of ['clearTimeout', 'clearInterval', 'clearImmediate']) {
+    const orig = timers[name];
+    const patched = function (t) {
+      const aid = t && typeof t === 'object' ? timerAid.get(t) : undefined;
+      if (aid !== undefined) guarded(() => emit('async.cancel', { aid }));
+      return orig.apply(this, arguments);
+    };
+    timers[name] = patched;
+    if (globalThis[name] === orig) globalThis[name] = patched;
+  }
 
   // ---- console ---------------------------------------------------------------
   for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
@@ -125,8 +142,12 @@ if (OUT && !globalThis.__rewind) {
       const orig = em.emit;
       em.emit = function () { return anchor.runInAsyncScope(orig, this, ...arguments); };
     }
-    res.once('finish', () => guarded(() => emit('http.out', { name: `${res.statusCode} ${req.method} ${req.url}`,
-      data: { req: id, status: res.statusCode, ms: Number(process.hrtime.bigint() - start) / 1e6 } }, res.statusCode >= 500)));
+    let finished = false;
+    res.once('finish', () => { finished = true; guarded(() => emit('http.out', { name: `${res.statusCode} ${req.method} ${req.url}`,
+      data: { req: id, status: res.statusCode, ms: Number(process.hrtime.bigint() - start) / 1e6 } }, res.statusCode >= 500)); });
+    // connection closed before the response finished: the client gave up (or the socket died), not a stall
+    res.once('close', () => { if (!finished) guarded(() => emit('http.abort', { name: `${req.method} ${req.url}`,
+      data: { req: id, ms: Number(process.hrtime.bigint() - start) / 1e6 } })); });
     const args = arguments;
     return anchor.runInAsyncScope(() => {
       guarded(() => emit('http.in', { aid: anchor.asyncId(), name: `${req.method} ${req.url}`, data: { req: id, method: req.method, url: req.url } }));

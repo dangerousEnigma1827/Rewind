@@ -84,6 +84,7 @@ first: [spikes/RESULTS.md](spikes/RESULTS.md).
 | **Exception correlation** | `rewind why` | uncaught exceptions and unhandled promise rejections (including after `await`) tied back to the callback and request that caused them |
 | **Variable watching** | `rewind record --watch VAR` | every syntactic write to a watched top-level CommonJS variable: location, the request that made it, before/after values |
 | **Execution comparison** | `rewind diff A B` | aligns two runs and reports the first divergence, and whether a step moved (different interleaving) or is new (different code path) |
+| **Unfinished work** | `rewind pending` | each request as completed, failed (5xx), cancelled by the client, or without a response; for the latter, what your code was still waiting on (a promise that never settled, a timer that never ran). Only claimed from a complete recording |
 
 ### Evidence levels
 

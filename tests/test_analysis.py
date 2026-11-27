@@ -168,3 +168,71 @@ def test_diff_good_vs_bad_points_at_the_interleaving(demo):
     # harness callbacks are out of scope by default, present with everything=True
     assert all(t.startswith(("#", "run.end", "log", "error")) for t, _ in res.a + res.b)
     assert len(A.tokens(bad, everything=True)) > len(res.b)
+
+
+# ---- pending (F5) --------------------------------------------------------------------
+def by_url(run, rep):
+    return {run.requests[rid].inbound.data["url"]: st for rid, st in rep.states.items()}
+
+
+def test_pending_after_normal_completion_and_failure(record, rewind_home, demo):
+    run = load(record, rewind_home, "http_two.js")
+    rep = A.pending(run)
+    assert_evidence_integrity(run, rep)
+    assert rep.complete and by_url(run, rep) == {"/1": "completed", "/2": "failed"}
+    assert not rep.ops and not levels(rep, A.INFERRED)
+    assert any("responded 500" in t for t in levels(rep, A.OBSERVED))
+    good = demo(sequential=True, watch=False)
+    g = A.pending(good)
+    assert set(g.states.values()) == {"completed"} and not g.ops and not levels(g, A.INFERRED)
+
+
+def test_pending_after_a_crash_blames_the_crash_not_a_stall(demo):
+    run = demo()
+    rep = A.pending(run)
+    assert_evidence_integrity(run, rep)
+    assert rep.complete and rep.states == {1: "completed", 2: "completed", 3: "unresolved", 4: "completed"}
+    assert any("#3 POST /order" in t and "uncaught error" in t for t in levels(rep, A.DERIVED))
+    assert not levels(rep, A.INFERRED)  # unfinished work after a crash is a consequence, never called a stall
+
+
+def test_pending_finds_genuinely_unresolved_requests(record, rewind_home):
+    run = load(record, rewind_home, "stall.js")
+    rep = A.pending(run)
+    assert_evidence_integrity(run, rep)
+    assert rep.complete and by_url(run, rep) == {"/ok": "completed", "/fail": "failed", "/abort": "cancelled",
+                                                 "/hang": "unresolved", "/forgot": "unresolved"}
+    inf = levels(rep, A.INFERRED)
+    assert any("GET /hang likely stalled" in t and "stall.js:18" in t and "never settled" in t for t in inf)
+    assert any("GET /forgot" in t and "res.end()" in t for t in inf)
+    assert len(inf) == 2
+    # the timer /ok set and cleared is cancelled, not pending; every listed op belongs to /hang
+    assert not any(i.name == "neverNeeded" for _, i in rep.ops)
+    assert {run.requests[rid].inbound.data["url"] for rid, _ in rep.ops} == {"/hang"}
+    assert any(e.kind == "async.cancel" for e in run.events)
+
+
+def test_pending_claims_nothing_from_an_incomplete_recording(record, rewind_home):
+    r = record("stall.js", {"STALL_HOLD": "1"}, kill_when=lambda s: "error.logged" in s)
+    db = store.connect()
+    store.ingest(db, "killed", r.path)
+    run = A.Run(store.events(db, "killed"), sources=store.sources(db, "killed"))
+    rep = A.pending(run)
+    assert_evidence_integrity(run, rep)
+    assert not rep.complete and not rep.ops and not levels(rep, A.INFERRED)
+    assert any("recording incomplete" in t for t in levels(rep, A.DERIVED))
+    assert by_url(run, rep)["/hang"] == "unresolved" and by_url(run, rep)["/abort"] == "cancelled"
+    assert any("GET /hang" in t and "recording is incomplete" in t for t in levels(rep, A.DERIVED))
+
+
+def test_pending_after_a_signal_or_torn_lines(record, rewind_home):
+    run = load(record, rewind_home, "stall.js")
+    end = run.events[-1]
+    assert end.kind == "run.end"
+    signalled = A.Run(run.events[:-1] + [store.Event(end.seq, end.t, "run.signal", end.eid, name="SIGINT")])
+    rep = A.pending(signalled)
+    assert rep.complete and any("still in flight when SIGINT arrived" in t for t in levels(rep, A.DERIVED))
+    assert any("likely stalled" in t for t in levels(rep, A.INFERRED))  # a signal flushes everything first
+    torn = A.Run(run.events, {"skipped_lines": 1})
+    t = A.pending(torn)
+    assert not t.complete and not t.ops and not levels(t, A.INFERRED)

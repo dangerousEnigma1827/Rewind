@@ -14,7 +14,7 @@ from functools import cached_property
 from .store import Event, resolve_file
 
 OBSERVED, DERIVED, INFERRED = "observed", "derived", "inferred"
-STORY_KINDS = ("run.start", "run.end", "run.signal", "http.in", "http.out", "log",
+STORY_KINDS = ("run.start", "run.end", "run.signal", "http.in", "http.out", "http.abort", "log",
                "error.uncaught", "error.logged", "mutation", "mutation.capped", "instrument")
 ERROR_KINDS = ("error.uncaught", "error.logged")
 
@@ -376,6 +376,129 @@ def _top_level_names(run: Run, frame) -> set[str]:
 
 def _is_function(run: Run, frame, name: str) -> bool:
     return bool(re.search(rf"^function\s+{re.escape(name)}\b|^(?:const|let|var)\s+{re.escape(name)}\s*=\s*(?:require\(|\(|function|async)", _source(run, frame), re.M))
+
+
+# ---- pending ---------------------------------------------------------------------------
+# Resource types whose fate the recorder sees: callbacks fire (async.before), promises settle (async.resolve, which
+# fires for rejections too), timers can be cleared (async.cancel). Other types (sockets, DNS, ...) aren't judged.
+UNFINISHED = {"Timeout": "never ran", "Immediate": "never ran", "TickObject": "never ran",
+              "FSREQCALLBACK": "never completed", "FSREQPROMISE": "never completed", "PROMISE": "never settled"}
+
+
+@dataclass
+class Pending:
+    complete: bool                      # recording reached run.end or a flushed run.signal, with no torn lines
+    states: dict[int, str]              # request id -> completed | failed | cancelled | unresolved
+    ops: list[tuple[int | None, Event]]  # (request id or None, async.init) of unfinished operations from user code
+    findings: list[Finding]
+
+
+def plural_(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def recording_end(run: Run) -> tuple[bool, Event | None]:
+    """(complete, last lifecycle event). Only run.end or run.signal flush every buffered event; without one (SIGKILL,
+    power loss) or with torn lines, missing events prove nothing."""
+    end = next((e for e in reversed(run.events) if e.kind in ("run.end", "run.signal")), None)
+    return end is not None and not (run.meta.get("skipped_lines") or 0), end
+
+
+def pending(run: Run) -> Pending:
+    """What had not finished when the recording ended: requests without a response, and operations created from
+    user code that never ran or settled. Absence is only evidence in a complete recording."""
+    F: list[Finding] = []
+    complete, end = recording_end(run)
+    aborts = {e.data["req"]: e for e in run.events if e.kind == "http.abort"}
+    fatal = next((e for e in run.events if e.kind == "error.uncaught"), None)
+    code = (end.data or {}).get("code") if end is not None and end.kind == "run.end" else None
+    if fatal is not None and code not in (None, 0):
+        ended, reason = f"exited with code {code} after an uncaught error (seq {fatal.seq})", "the process exited after an uncaught error"
+    elif end is not None and end.kind == "run.signal":
+        ended, reason = f"stopped by {end.name}", f"it was still in flight when {end.name} arrived"
+    elif end is not None:
+        ended, reason = f"exited with code {code}", f"the process exited (code {code}) while it was in flight"
+    else:
+        ended, reason = "has no run.end", "the recording is incomplete, so a response may have been lost with it"
+    if complete:
+        F.append(Finding(OBSERVED, f"recording complete: the program {ended}", [end.seq]))
+    else:
+        last = run.events[-1].seq if run.events else 0
+        why_ = "it has no run.end (killed or crashed hard)" if end is None else "torn lines were skipped at ingest"
+        F.append(Finding(DERIVED, f"recording incomplete: {why_}. Events after seq {last} may be lost, so nothing is "
+                                  f"reported as never finishing", [last] if run.events else []))
+
+    states: dict[int, str] = {}
+    for r in run.requests.values():
+        if r.outbound:
+            states[r.id] = "failed" if (r.outbound.data or {}).get("status", 0) >= 500 else "completed"
+        elif r.id in aborts:
+            states[r.id] = "cancelled"
+        else:
+            states[r.id] = "unresolved"
+    counts = {s: sum(v == s for v in states.values()) for s in ("completed", "failed", "cancelled", "unresolved")}
+    if states:
+        F.append(Finding(DERIVED, f"{len(states)} request{'s' if len(states) != 1 else ''}: {counts['completed']} completed, "
+                                  f"{counts['failed']} failed (5xx), {counts['cancelled']} cancelled by the client, "
+                                  f"{counts['unresolved']} without a response", [r.inbound.seq for r in run.requests.values()]))
+    for rid, st in states.items():
+        r = run.requests[rid]
+        if st == "failed":
+            F.append(Finding(OBSERVED, f"request {r.label} responded {r.outbound.data.get('status')}", [r.outbound.seq]))
+        elif st == "cancelled":
+            a = aborts[rid]
+            F.append(Finding(OBSERVED, f"request {r.label}: the connection closed {a.data.get('ms', 0):.0f} ms after it "
+                                       f"arrived, before a response was sent (client gave up)", [a.seq]))
+        elif st == "unresolved":
+            F.append(Finding(DERIVED, f"request {r.label} arrived (seq {r.inbound.seq}) but no response was recorded: {reason}",
+                             [r.inbound.seq] + ([end.seq] if end is not None else [])))
+
+    ops: list[tuple[int | None, Event]] = []
+    if complete:
+        settled = {e.aid for e in run.events if e.kind in ("async.resolve", "async.cancel")}
+
+        def fate(i: Event) -> str:
+            if i.type != "Timeout" or (i.data or {}).get("delay") is None:
+                return UNFINISHED[i.type]
+            due = i.t / 1000 + i.data["delay"]  # ms since recorder start
+            return "never ran" if end.t / 1000 >= due else f"was not due yet ({i.data['delay']} ms timer)"
+
+        hidden = 0
+        for aid, i in run.inits.items():
+            if i.type in UNFINISHED and run.site(aid) and aid not in settled and (i.type == "PROMISE" or aid not in run.fired):
+                rid = run.request_of(aid)
+                if rid and states.get(rid) != "unresolved":
+                    hidden += 1  # leftovers of a request that already finished (cleanup timers, Node's date cache)
+                else:
+                    ops.append((rid, i))
+        grouped: dict[tuple, list[Event]] = {}
+        for rid, i in ops:
+            grouped.setdefault((rid, i.type, where(run.site(i.aid)), fate(i)), []).append(i)
+        for (rid, typ, at, verb), inits in grouped.items():
+            owner = f"request {run.requests[rid].label}" if rid else "outside any request"
+            times = f" (×{len(inits)})" if len(inits) > 1 else ""
+            F.append(Finding(DERIVED, f"{owner}: {run.describe(inits[0].aid)} created at {at} {verb} when the "
+                                      f"recording ended{times}", [i.seq for i in inits]))
+        if hidden:
+            F.append(Finding(DERIVED, f"not listed: {plural_(hidden, 'unfinished operation')} under requests that already "
+                                      f"responded or were cancelled", []))
+        if fatal is None or code in (None, 0):  # after a crash, unfinished work is a consequence, not a stall
+            for rid, st in states.items():
+                if st != "unresolved":
+                    continue
+                r, mine = run.requests[rid], [i for orid, i in ops if orid == rid]
+                if mine:
+                    i = max(mine, key=lambda x: x.seq)  # the most recent unfinished step is what it was waiting on
+                    verb = fate(i)
+                    head = "likely stalled" if not verb.startswith("was not due") else "likely still waiting"
+                    F.append(Finding(INFERRED, f"request {r.label} {head}: it was waiting on {run.describe(i.aid)} "
+                                               f"({where(run.site(i.aid))}), which {verb}",
+                                     [r.inbound.seq, i.seq, end.seq]))
+                else:
+                    F.append(Finding(INFERRED, f"request {r.label} had no unfinished operation from your code when the "
+                                               f"recording ended: its handler may have returned without sending a response "
+                                               f"(e.g. a missing res.end())", [r.inbound.seq, end.seq]))
+    return Pending(complete, states, ops, F)
 
 
 # ---- diff ------------------------------------------------------------------------------
