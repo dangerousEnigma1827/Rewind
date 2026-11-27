@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import os
-import secrets
-import shutil
 import subprocess
 import sys
 import time
@@ -16,7 +14,7 @@ import typer.rich_utils
 from rich.markup import escape
 from typer.core import TyperCommand, TyperGroup
 
-from . import RECORDER, __version__, analysis, render, store
+from . import __version__, analysis, recording, render, store
 from .render import console
 
 
@@ -70,30 +68,23 @@ def record(ctx: typer.Context,
     cmd = list(ctx.args)
     if not cmd:
         render.fail("nothing to record — usage: rewind record -- node app.js"); raise typer.Exit(2)
-    if not os.path.basename(cmd[0]).lower().removesuffix(".exe") == "node":
-        cmd = ["node"] + cmd  # `rewind record app.js` shorthand
-    node = shutil.which(cmd[0]) or cmd[0]
-    run_id = secrets.token_hex(4)
-    raw = store.home() / "runs" / f"{run_id}.ndjson"
-    env = {**os.environ, "REWIND_OUT": str(raw), "REWIND_RUN_ID": run_id}
-    if watch:
-        env["REWIND_WATCH"] = watch
-    render.recording(run_id, " ".join(cmd), watch)
+    rec = recording.prepare(cmd, label, watch)
+    render.recording(rec.run_id, " ".join(rec.cmd), watch)
     started, t = datetime.now().isoformat(timespec="seconds"), time.perf_counter()
     try:
-        p = subprocess.Popen([node, "--require", str(RECORDER), *cmd[1:]], env=env)
+        p = subprocess.Popen(rec.args, env=rec.env)
     except FileNotFoundError:
-        render.fail(f"cannot run {cmd[0]!r} — is Node.js on PATH?"); raise typer.Exit(127)
+        render.fail(f"cannot run {rec.cmd[0]!r} — is Node.js on PATH?"); raise typer.Exit(127)
     try:
         code = p.wait()
     except KeyboardInterrupt:  # child got the same Ctrl+C; let it flush and exit
         code = p.wait()
     secs = time.perf_counter() - t
-    if not raw.exists():
-        render.fail("recorder produced no output (did node start?)"); raise typer.Exit(code or 1)
-    with render.working("indexing the recording"):
-        row = store.ingest(_db(), run_id, raw, label=label, cmd=cmd, started_at=started,
-                           ended_at=datetime.now().isoformat(timespec="seconds"), exit_code=code)
+    try:
+        with render.working("indexing the recording"):
+            row = recording.store_run(rec, code, started, datetime.now().isoformat(timespec="seconds"))
+    except recording.NoOutput as e:
+        render.fail(str(e)); raise typer.Exit(code or 1)
     render.run_summary(row, secs)
     raise typer.Exit(code)
 
