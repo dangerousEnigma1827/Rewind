@@ -107,7 +107,7 @@ class RewindApp(App):
     def __init__(self, home: Path | None = None):
         super().__init__()
         self.session = Session(home or home_path())
-        self.row = self.run = self.pend = None
+        self.row = self.current = self.pend = None
         self.req_filter: int | None = None
         self.kind_idx, self.search_text, self.callbacks, self.raw = 0, "", False, False
         self.shown: list[int] = []                       # seqs currently in the timeline, in order
@@ -162,7 +162,7 @@ class RewindApp(App):
 
     def on_resize(self, event):
         self._layout(event.size.width, event.size.height)
-        if self.run is not None:
+        if self.current is not None:
             self.call_after_refresh(self.refresh_timeline, True)
 
     def _layout(self, w: int, h: int):
@@ -182,7 +182,7 @@ class RewindApp(App):
         runs.clear_options()
         if not has:
             self.query_one("#welcome-card", Static).update(V.welcome(str(self.session.home)))
-            self.row = self.run = self.pend = None
+            self.row = self.current = self.pend = None
             self._topbar()
             return
         runs.add_options([Option(V.run_option(r), id=r["id"]) for r in self.session.rows])
@@ -198,22 +198,22 @@ class RewindApp(App):
             self.open_run(ev.option_id)
 
     def open_run(self, run_id: str, keep_filters: bool = False):
-        self.row, self.run, self.pend = self.session.load(run_id)
+        self.row, self.current, self.pend = self.session.load(run_id)
         if not keep_filters:
             self.req_filter, self.search_text, self.kind_idx, self.raw = None, "", 0, False
             self.query_one("#search", Input).value = ""
         reqs = self.query_one("#requests", OptionList)
         reqs.clear_options()
-        if self.run.requests:
-            reqs.add_option(Option(V.T(f"[mute]◇[/] [bold]all requests[/]  [dim]{len(self.run.requests)}[/]"), id="all"))
-            reqs.add_options([Option(V.request_option(self.run, r, self.pend.states.get(r.id, "")), id=str(r.id))
-                              for r in self.run.requests.values()])
+        if self.current.requests:
+            reqs.add_option(Option(V.T(f"[mute]◇[/] [bold]all requests[/]  [dim]{len(self.current.requests)}[/]"), id="all"))
+            reqs.add_options([Option(V.request_option(self.current, r, self.pend.states.get(r.id, "")), id=str(r.id))
+                              for r in self.current.requests.values()])
             with reqs.prevent(OptionList.OptionHighlighted):
-                reqs.highlighted = 0 if self.req_filter is None else 1 + list(self.run.requests).index(self.req_filter)
+                reqs.highlighted = 0 if self.req_filter is None else 1 + list(self.current.requests).index(self.req_filter)
         else:
             reqs.add_option(Option(V.T("[mute]no HTTP requests in this run[/]"), id="none", disabled=True))
-        self.query_one("#requests-panel").border_title = f"requests [{len(self.run.requests)}]"
-        errors = self.run.errors
+        self.query_one("#requests-panel").border_title = f"requests [{len(self.current.requests)}]"
+        errors = self.current.errors
         self.why_target = errors[0].seq if errors else None
         self._topbar()
         self.refresh_timeline()
@@ -230,10 +230,10 @@ class RewindApp(App):
         if self.baseline:
             b = self.session.row(self.baseline)
             base = (b["label"] or b["id"]) if b else None
-        self.query_one("#topbar", Static).update(V.header(self.row, self.run, base, str(self.session.home)))
+        self.query_one("#topbar", Static).update(V.header(self.row, self.current, base, str(self.session.home)))
 
     def _run_summary(self):
-        r, run = self.row, self.run
+        r, run = self.row, self.current
         from rich.console import Group
         counts = {s: sum(v == s for v in self.pend.states.values()) for s in ("completed", "failed", "cancelled", "unresolved")}
         g = V.grid({"style": STYLES["mute"], "no_wrap": True, "width": 9}, {"ratio": 1, "overflow": "fold"})
@@ -276,11 +276,11 @@ class RewindApp(App):
         if rid is None:
             self._run_summary()
         else:
-            r = self.run.requests[rid]
+            r = self.current.requests[rid]
             st = self.pend.states.get(rid, "")
             mine = [f for f in self.pend.findings if f"request {r.label}" in f.text or f"#{rid} " in f.text]
             from rich.console import Group
-            parts = [V.request_option(self.run, r, st), Text(), V.T(f"[mute]arrived[/]  seq {r.inbound.seq}  "
+            parts = [V.request_option(self.current, r, st), Text(), V.T(f"[mute]arrived[/]  seq {r.inbound.seq}  "
                      f"[dim]{r.inbound.t / 1000:.1f} ms[/]")]
             if r.outbound:
                 parts.append(V.T(f"[mute]responded[/] seq {r.outbound.seq}  status {r.outbound.data.get('status')}  "
@@ -295,7 +295,7 @@ class RewindApp(App):
 
     # ---- timeline -----------------------------------------------------------------------------
     def timeline_rows(self) -> list:
-        run = self.run
+        run = self.current
         if self.raw:
             rows = run.events[:RAW_LIMIT]
         else:
@@ -317,7 +317,7 @@ class RewindApp(App):
         width = max(t.size.width - 28, 20)
         t.clear()
         for e in rows:
-            t.add_row(*V.timeline_cells(self.run, e, width), key=str(e.seq))
+            t.add_row(*V.timeline_cells(self.current, e, width), key=str(e.seq))
         self.shown = [e.seq for e in rows]
         if cur in self.shown:
             t.move_cursor(row=self.shown.index(cur), animate=False)
@@ -327,11 +327,11 @@ class RewindApp(App):
         if self.callbacks:
             bits.append("+ callbacks")
         if self.raw:
-            bits = ["every recorded event" + (f" (first {RAW_LIMIT:,})" if len(self.run.events) > RAW_LIMIT else "")]
+            bits = ["every recorded event" + (f" (first {RAW_LIMIT:,})" if len(self.current.events) > RAW_LIMIT else "")]
         if self.search_text:
             bits.append(f"“{self.search_text}”")
         self.query_one("#filterbar", Static).update(V.T(
-            f"[mute]{' · '.join(bits)}[/]  [dim]{len(rows):,} of {len(self.run.events):,} events  "
+            f"[mute]{' · '.join(bits)}[/]  [dim]{len(rows):,} of {len(self.current.events):,} events  "
             f"/ search · f kind · c callbacks · a all[/]"))
         if not rows:
             self.show_detail(V.T("[mute]no events match: esc clears the search and filters[/]"), "timeline")
@@ -339,15 +339,15 @@ class RewindApp(App):
 
     @on(DataTable.RowHighlighted, "#table")
     def _row_highlighted(self, ev: DataTable.RowHighlighted):
-        if self.run is None or ev.row_key is None or ev.row_key.value is None or not ev.data_table.has_focus:
+        if self.current is None or ev.row_key is None or ev.row_key.value is None or not ev.data_table.has_focus:
             return
         self._row_detail(int(ev.row_key.value))
 
     def _row_detail(self, seq: int):
-        e = self.run.by_seq.get(seq)
+        e = self.current.by_seq.get(seq)
         if e is None:
             return
-        body = V.event_detail(self.run, e)
+        body = V.event_detail(self.current, e)
         if self.active and e.seq in self.active[1].evidence:
             from rich.console import Group
             f = self.active[1]
@@ -361,7 +361,7 @@ class RewindApp(App):
         return self.shown[t.cursor_row] if self.shown and 0 <= t.cursor_row < len(self.shown) else None
 
     def action_search(self):
-        if self.run is None:
+        if self.current is None:
             return
         self.action_view("timeline")
         s = self.query_one("#search", Input)
@@ -378,7 +378,7 @@ class RewindApp(App):
         self.query_one("#table", DataTable).focus()
 
     def action_kind_filter(self):
-        if self.run is None:
+        if self.current is None:
             return
         self.kind_idx = (self.kind_idx + 1) % len(KINDS)
         self.raw = False
@@ -386,18 +386,18 @@ class RewindApp(App):
         self.refresh_timeline()
 
     def action_callbacks(self):
-        if self.run is not None:
+        if self.current is not None:
             self.callbacks, self.raw = not self.callbacks, False
             self.refresh_timeline()
 
     def action_raw(self):
-        if self.run is not None:
+        if self.current is not None:
             self.raw = not self.raw
             self.refresh_timeline()
 
     def action_clear(self):
         s = self.query_one("#search", Input)
-        if self.run is None:
+        if self.current is None:
             return
         changed = self.search_text or self.kind_idx or self.raw or self.callbacks or s.has_class("-shown")
         s.value, self.search_text = "", ""
@@ -428,10 +428,10 @@ class RewindApp(App):
             head.update(V.T("[ok]●[/] [mute]no errors recorded in this run[/]"))
             self._fill("why", [], "Select any event in the timeline and press w to explain it.")
             return
-        inv = A.investigate(self.run, self.run.by_seq[self.why_target])
-        errors = self.run.errors
+        inv = A.investigate(self.current, self.current.by_seq[self.why_target])
+        errors = self.current.errors
         pos = f"error {errors.index(inv.target) + 1} of {len(errors)}" if inv.target in errors else f"event seq {inv.target.seq}"
-        head.update(V.why_head(self.run, inv, pos))
+        head.update(V.why_head(self.current, inv, pos))
         self._fill("why", inv.findings, "nothing to explain")
 
     def refresh_pending(self):
@@ -459,7 +459,7 @@ class RewindApp(App):
     def _detail_for_focus(self):
         """The details pane always describes the focused panel's selected item."""
         w = self.focused
-        if self.run is None or w is None:
+        if self.current is None or w is None:
             return
         if w.id == "runs":
             self._run_summary()
@@ -485,7 +485,7 @@ class RewindApp(App):
     def _run_for(self, f: A.Finding) -> A.Run:
         if f.run and self.diff_pair:
             return self.session.load(self.diff_pair[0] if f.run == "A" else self.diff_pair[1])[1]
-        return self.run
+        return self.current
 
     def action_evidence(self, step: int):
         if not self.active or not self.active[1].evidence:
@@ -513,7 +513,7 @@ class RewindApp(App):
 
     def jump(self, seq: int):
         """Show event `seq` in the timeline, widening the filters only as far as needed to reach it."""
-        if seq not in self.run.by_seq:
+        if seq not in self.current.by_seq:
             self.notify(f"seq {seq} is not in this recording", severity="error")
             return
         if seq not in self.shown:
@@ -533,22 +533,22 @@ class RewindApp(App):
 
     # ---- state / tree / diff ------------------------------------------------------------------
     def action_why(self):
-        if self.run is None:
+        if self.current is None:
             return
         views = self.query_one("#views", TabbedContent)
         seq = self.selected_seq()
-        e = self.run.by_seq.get(seq) if seq is not None else None
+        e = self.current.by_seq.get(seq) if seq is not None else None
         explainable = e is not None and not e.kind.startswith(("run.", "async.")) and e.kind not in ("instrument", "source")
         if views.active == "timeline" and self.focused is self.query_one("#table") and explainable:
             self.why_target = seq
-        elif self.why_target is None and self.run.errors:
-            self.why_target = self.run.errors[0].seq
+        elif self.why_target is None and self.current.errors:
+            self.why_target = self.current.errors[0].seq
         self.refresh_why()
         self.action_view("why")
         self.query_one("#why-list", OptionList).focus()
 
     def action_state(self):
-        if self.run is None:
+        if self.current is None:
             return
         self.refresh_state()
         self.action_view("state")
@@ -556,26 +556,26 @@ class RewindApp(App):
     def refresh_state(self):
         seq = self.selected_seq()
         if seq is None:
-            seq = self.run.events[-1].seq if self.run.events else None
+            seq = self.current.events[-1].seq if self.current.events else None
         if seq is None:
             return
-        self.query_one("#state-body", Static).update(V.state_view(self.run, A.state_at(self.run, seq)))
+        self.query_one("#state-body", Static).update(V.state_view(self.current, A.state_at(self.current, seq)))
 
     def refresh_tree(self):
         tree = self.query_one("#tree-view", Tree)
         tree.clear()
-        root_aid = self.run.requests[self.req_filter].anchor if self.req_filter else 1
-        node, pruned = A.build_tree(self.run, root_aid)
-        title = "main module" if root_aid == 1 else self.run.requests[self.req_filter].label
-        tree.root.set_label(V.T(V.R.tree_label(self.run, node, title)))
+        root_aid = self.current.requests[self.req_filter].anchor if self.req_filter else 1
+        node, pruned = A.build_tree(self.current, root_aid)
+        title = "main module" if root_aid == 1 else self.current.requests[self.req_filter].label
+        tree.root.set_label(V.T(V.R.tree_label(self.current, node, title)))
         tree.root.data = ("aid", node.aid)
 
         def add(parent, n):
             for e in n.events:
-                parent.add_leaf(V.T(f"[{V.R.kind_style(e.kind)}]{V.R.GLYPH.get(e.kind, '·')}[/] {V.R.event_text(self.run, e)}"),
+                parent.add_leaf(V.T(f"[{V.R.kind_style(e.kind)}]{V.R.GLYPH.get(e.kind, '·')}[/] {V.R.event_text(self.current, e)}"),
                                 data=("seq", e.seq))
             for c in n.children:
-                add(parent.add(V.T(V.R.tree_label(self.run, c, title)), data=("aid", c.aid), expand=True), c)
+                add(parent.add(V.T(V.R.tree_label(self.current, c, title)), data=("aid", c.aid), expand=True), c)
         add(tree.root, node)
         tree.root.expand()
         if pruned:
@@ -591,9 +591,9 @@ class RewindApp(App):
         if not data:
             return
         kind, val = data
-        e = self.run.by_seq.get(val) if kind == "seq" else self.run.inits.get(val)
+        e = self.current.by_seq.get(val) if kind == "seq" else self.current.inits.get(val)
         if e is not None:
-            self.show_detail(V.event_detail(self.run, e), f"seq {e.seq}")
+            self.show_detail(V.event_detail(self.current, e), f"seq {e.seq}")
 
     def action_baseline(self):
         if self.row is None:
@@ -613,7 +613,7 @@ class RewindApp(App):
             self.action_view("diff")
             return
         a_row, a_run, _ = self.session.load(self.baseline)
-        res = A.diff(a_run, self.run)
+        res = A.diff(a_run, self.current)
         self.diff_pair = (self.baseline, self.row["id"])
         name = lambda r: f"[id]{r['id']}[/]" + (f" [label]{r['label']}[/]" if r["label"] else "")
         self.query_one("#diff-head", Static).update(V.diff_view(res, name(a_row), name(self.row)))
@@ -623,7 +623,7 @@ class RewindApp(App):
 
     # ---- navigation ---------------------------------------------------------------------------
     def action_view(self, name: str):
-        if self.run is None:
+        if self.current is None:
             return
         views = self.query_one("#views", TabbedContent)
         if views.active != name:
@@ -637,9 +637,9 @@ class RewindApp(App):
     @on(TabbedContent.TabActivated, "#views")
     def _tab(self, ev):
         name = ev.pane.id if ev.pane else None
-        if name == "tree" and self.run is not None:
+        if name == "tree" and self.current is not None:
             self.refresh_tree()
-        if name == "state" and self.run is not None:
+        if name == "state" and self.current is not None:
             self.refresh_state()
         self._main_title()
 

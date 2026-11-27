@@ -60,6 +60,17 @@ async def press(pilot, *keys):
         await pilot.pause()
 
 
+def test_the_real_entry_point_runs(home):
+    # run_test() bypasses App.run(); an attribute once shadowed run() and only a real launch caught it
+    async def auto(pilot):
+        await pilot.pause()
+        assert pilot.app.current is not None and pilot.app.row["label"] == "bad"
+        await pilot.press("q")
+    app = RewindApp(home)
+    app.run(headless=True, size=(120, 36), auto_pilot=auto)
+    assert app.return_code in (0, None)
+
+
 # ---- presentation helpers ---------------------------------------------------------------------------
 def test_markup_resolves_to_concrete_styles():
     t = V.T("[mute]muted[/] [kind.read]read[/] [err.t]err[/] [r2]#2[/]")
@@ -102,8 +113,8 @@ def test_runs_requests_and_timeline_navigation(home):
         assert app.row["label"] == "bad"
         await press(pilot, "2", "down", "down", "down")  # all, #1, #2, #3
         assert app.req_filter == 3
-        rows = [app.run.by_seq[s] for s in app.shown]
-        assert rows and all(app.run.request_of(e.aid if e.kind.startswith("async.") else e.eid) == 3 for e in rows)
+        rows = [app.current.by_seq[s] for s in app.shown]
+        assert rows and all(app.current.request_of(e.aid if e.kind.startswith("async.") else e.eid) == 3 for e in rows)
         assert any(e.kind == "error.uncaught" for e in rows)
         await press(pilot, "enter")
         assert app.focused.id == "table" and app.query_one("#views").active == "timeline"
@@ -129,7 +140,7 @@ def test_why_findings_navigate_to_their_evidence(home):
         assert app.selected_seq() == f.evidence[1]
         await press(pilot, "left_square_bracket", "left_square_bracket")
         assert app.selected_seq() == f.evidence[-1]
-        assert all(s in app.run.by_seq for s in f.evidence)
+        assert all(s in app.current.by_seq for s in f.evidence)
     drive(home, script)
 
 
@@ -137,7 +148,7 @@ def test_jumping_widens_filters_only_as_needed(home):
     async def script(app, pilot):
         await press(pilot, "2", "down", "down")  # request #2 only
         assert app.req_filter == 2
-        init = next(e for e in app.run.events if e.kind == "async.init" and app.run.request_of(e.aid) == 3)
+        init = next(e for e in app.current.events if e.kind == "async.init" and app.current.request_of(e.aid) == 3)
         app.jump(init.seq)  # an internal event of another request: needs every event shown
         await pilot.pause()
         assert app.raw and app.req_filter is None and app.selected_seq() == init.seq
@@ -149,14 +160,14 @@ def test_jumping_widens_filters_only_as_needed(home):
 
 def test_state_pending_and_tree_views(home):
     async def script(app, pilot):
-        crash = app.run.errors[0].seq
+        crash = app.current.errors[0].seq
         app.jump(crash)
         await pilot.pause()
         await press(pilot, "s")
         assert app.query_one("#views").active == "state"
         from rich.console import Console
         c = Console(width=160, record=True, file=open(os.devnull, "w"))
-        c.print(V.state_view(app.run, A.state_at(app.run, crash)))
+        c.print(V.state_view(app.current, A.state_at(app.current, crash)))
         text = c.export_text()
         assert "currentCart" in text and "read at seq" in text and '"C-303"' in text
         await press(pilot, "p")
@@ -203,7 +214,7 @@ def test_search_filter_and_clear(home):
         for ch in "charged":
             await pilot.press(ch)
         await pilot.pause()
-        assert app.shown and all("charged" in V.T(V.R.event_text(app.run, app.run.by_seq[s])).plain for s in app.shown)
+        assert app.shown and all("charged" in V.T(V.R.event_text(app.current, app.current.by_seq[s])).plain for s in app.shown)
         await press(pilot, "enter", "f")
         assert app.kind_idx == 1
         await press(pilot, "escape")
