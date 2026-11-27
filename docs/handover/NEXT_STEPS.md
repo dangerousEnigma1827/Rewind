@@ -1,6 +1,12 @@
 # Next steps
 
-Back to [HANDOVER.md](HANDOVER.md). Nothing beyond M7 is approved work.
+Back to [HANDOVER.md](HANDOVER.md). Nothing beyond M7 was approved until 2026-11-27. With the deadline extended to 2026-11-28, the user approved work in parts: Part 1 (F2, F3) and Part 2 (F5, F12) are done on `feat/recording-reliability` ([PROJECT_STATUS.md](PROJECT_STATUS.md#extended-window-deadline-moved-to-2026-11-28-branch-featrecording-reliability-not-merged)). Parts 3 and 4 are not started and need the user's go-ahead.
+
+## Open after Part 2
+
+- Review and merge `feat/recording-reliability` (not pushed). Re-rehearse the demo from the merged `main`: steps are unchanged, and `rewind pending bad` and the error-time snapshot in `why bad` are new output.
+- Not verified on this branch: Linux, macOS, Node 20/22, PowerShell 5.1 console rendering of the new `pending` view.
+- `pending` is missing from the landing screen, which is exactly at its 80×24 limit (B10). Adding it needs a regrouping of the landing rows.
 
 ## What remains
 

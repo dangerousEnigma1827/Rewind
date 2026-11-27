@@ -1,6 +1,17 @@
 # Project status
 
-As of 2026-11-23. Back to [HANDOVER.md](HANDOVER.md). Full history: [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
+As of 2026-11-23, plus the extended-window work of 2026-11-27 (section below). Back to [HANDOVER.md](HANDOVER.md). Full history: [ENGINEERING_LOG.md](ENGINEERING_LOG.md).
+
+## Extended window (deadline moved to 2026-11-28), branch `feat/recording-reliability`, not merged
+
+| part | feature | commit | tests added |
+|---|---|---|---|
+| 1 | F2 source snapshots: analysis quotes the code that ran, not the file as edited later | `6232e9e` | 5 |
+| 1 | F3 `fork()`/`cluster` children no longer corrupt the parent's recording (bug reproduced first) | `30ae2fb` | 2 |
+| 2 | F5 `rewind pending`: requests completed / failed / cancelled / without a response, and unfinished user operations; nothing claimed from incomplete recordings | `3019f96` | 6 |
+| 2 | F12 error-time snapshots of watched values; derived "changed by a write `--watch` doesn't see" | `f2aca36` | 5 |
+
+Suite: **74 passed** on Windows 11, Python 3.15.2, Node 24.22.1 (56 on `main` before this branch). The full Phantom Discount walkthrough (7 steps plus `pending`) was re-run on the branch. Recorder overhead on the E6 workload, 9 interleaved runs: `main` 1.39 s vs branch 1.44 s median (baseline 0.61 s), within noise. Not run on Linux or macOS for this branch. Details per feature: [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md), [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Branch and commit state
 

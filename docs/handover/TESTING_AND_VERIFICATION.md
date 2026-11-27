@@ -2,7 +2,7 @@
 
 Back to [HANDOVER.md](HANDOVER.md). The test suite, the test-count history, the M0 experiments, M7 fresh-clone verification, and the terminal compatibility matrix. Bugs found in testing, with root causes and fixes, are in [ENGINEERING_LOG.md](ENGINEERING_LOG.md#3-bug-fix-and-verification-record).
 
-**Latest result:** 54 / 54 on Windows 11 (Python 3.15.2) and on Ubuntu 24.04 under WSL2 (Python 3.12.3), at `6320276`.
+**Latest result:** 74 / 74 on Windows 11 (Python 3.15.2, Node 24.22.1) at `f2aca36` on `feat/recording-reliability` (not run on Linux for this branch). Before that: 54 / 54 on Windows 11 and Ubuntu 24.04 under WSL2 at `6320276`; `main` has 56. The tables below describe the suite at `6320276`; the extended-window additions are listed after them.
 
 ## Test suite (verified by reading `tests/`)
 
@@ -19,6 +19,22 @@ Runner: `pytest` (config in `pyproject.toml`: `testpaths = ["tests"]`, `-p no:ca
 Count: **54 collected items** at `6320276` (the ×3 parametrization in `test_store.py` adds 2). History below.
 
 Fixtures: `chain.js`, `throw_timer.js`, `reject_await.js`, `http_two.js`, `http_keepalive.js`, `mutations.js`, `many_writes.js`, `esm_watch.mjs`, `kill_after_error.js`.
+
+### Extended-window additions (2026-11-27)
+
+The F2 and F3 tests were run against the code before the change and seen to fail (F3's also with the fix stashed). The F5 and F12 tests were written alongside their features and never run against the old code.
+
+| commit | file | tests |
+|---|---|---|
+| `6232e9e` F2 | `test_store.py` | snapshot is the code that ran (verified); file edited before ingest is `changed` and never shown; identical sources stored once; legacy runs fall back to disk |
+| `6232e9e` F2 | `test_cli.py` | `why` quotes the original failing line after `checkout.js` is overwritten |
+| `30ae2fb` F3 | `test_recorder.py` | forked child and `cluster` worker leave the parent's NDJSON intact (one `run.start`, contiguous seqs, no NULs, parent logs only) |
+| `3019f96` F5 | `test_analysis.py` | normal completion and 5xx; crash blames the crash, never a stall; genuinely unresolved (`/hang` stalled on the awaited promise, `/forgot` missing `res.end()`, `/abort` cancelled, cleared timer not pending); killed recording claims nothing; flushed `run.signal` counts as complete, torn lines don't |
+| `3019f96` F5 | `test_cli.py` | `rewind pending` end to end |
+| `f2aca36` F12 | `test_recorder.py` | values recorded safely (alias write visible, circular/BigInt/throwing getter → `[unserialisable …]`, undeclared name skipped, stdout, exit code and stack lines unchanged); one snapshot per uncaught error, tied by seq; none without `--watch` |
+| `f2aca36` F12 | `test_analysis.py` | `why` reports values and derives an unrecorded change; demo snapshot matches the last write; no snapshot findings without `--watch` |
+
+New fixtures: `fork_parent.js`, `cluster_primary.js`, `stall.js`, `snapshot.js`.
 
 ## Test count history
 
