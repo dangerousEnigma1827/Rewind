@@ -243,7 +243,7 @@ class RewindApp(App):
         g.add_row("requests", V.T(f"{len(run.requests)}"))
         if run.requests:
             g.add_row("", V.T(f"[ok]●[/] {counts['completed']} completed  [err]✖[/] {counts['failed']} failed"))
-            g.add_row("", V.T(f"[write]×[/] {counts['cancelled']} cancelled  [write]◌[/] {counts['unresolved']} unanswered"))
+            g.add_row("", V.T(f"[write]−[/] {counts['cancelled']} cancelled  [write]◌[/] {counts['unresolved']} unanswered"))
         g.add_row("watch", V.T((", ".join(run.watch) or "[dim]none[/]") + ("  [dim]+ reads[/]" if run.reads_recorded else "")))
         g.add_row("node", V.T(f"{(run.events[0].data or {}).get('node', '?') if run.events and run.events[0].kind == 'run.start' else '?'}"))
         g.add_row("recorded", V.T(f"{r['started_at'] or '?'}  [dim]{V.R.ago(r['started_at'])}[/]"))

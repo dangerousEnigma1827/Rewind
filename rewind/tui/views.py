@@ -21,12 +21,18 @@ LEVEL_MEANING = {A.OBSERVED: "a recorded event, reported as-is",
                  A.DERIVED: "computed deterministically from recorded events",
                  A.INFERRED: "a heuristic explanation, citing the evidence below"}
 STATUS = {"ok": "[ok]●[/]", "failed": "[err]✖[/]", "crashed": "[write]◌[/]"}
-REQ_STATE = {"completed": "[ok]●[/]", "failed": "[err]✖[/]", "cancelled": "[write]×[/]", "unresolved": "[write]◌[/]"}
+REQ_STATE = {"completed": "[ok]●[/]", "failed": "[err]✖[/]", "cancelled": "[write]−[/]", "unresolved": "[write]◌[/]"}
 VAR_STATUS = {"known": "[ok]known[/]", "partial": "[write]partial[/]", "unknown": "[mute]unknown[/]"}
+
+
+# Windows Terminal (and other terminals whose monospace font lacks it) draws U+2716 ✖ from an emoji font: two cells
+# wide and recoloured, which breaks column alignment. A full-screen app needs every glyph one cell wide.
+TUI_GLYPHS = str.maketrans({"✖": "×"})
 
 
 def T(markup: str) -> Text:
     """CLI markup -> Text in the TUI palette (glyphs swapped when a classic console's font lacks them)."""
+    markup = markup.translate(TUI_GLYPHS)
     if R.GLYPHS_MISSING:
         markup = markup.translate(R.GLYPH_TABLE)
     return R.rich_text(markup, STYLES)
