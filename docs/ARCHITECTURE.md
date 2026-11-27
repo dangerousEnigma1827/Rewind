@@ -96,9 +96,26 @@ need it are left out rather than computed from the wrong code. Runs ingested bef
 `rewind ui`, or bare `rewind` on an interactive terminal, opens a Textual app. It adds no debugging logic:
 - `app.py` reads through `store` (a read-only `Session`, which never creates `REWIND_HOME`) and calls the same
   analysis functions as the commands: `Run`, `investigate`, `pending`, `state_at`, `build_tree`, `diff`.
-- `views.py` turns their results into Rich renderables.
+- `views.py` turns their results into Rich renderables, worded for first-time users (it selects and words findings;
+  it never creates them).
 - `render.py`'s markup helpers (`event_row`, `event_text`, `tree_label`, `LEVEL`, `req_tag`) are shared. `render.rich_text`
   resolves their named styles against the TUI palette in `theme.py`, so one piece of markup renders in both worlds.
+- `screens.py` holds the screens around an investigation:
+  - **Home:** record, sample, recent runs.
+  - **Record:** a form over `rewind/recording.py`, the same code as `rewind record`. The program runs in the current
+    folder with a copy of the environment plus `REWIND_*`, with stdin closed and output streamed. Stopping sends
+    SIGINT on POSIX (the recorder flushes) and terminates on Windows (the run is stored as incomplete).
+  - **Help:** a centered modal.
+- The investigation is the app's default screen.
+  - `RewindApp.check_action` keeps investigation keys inactive while another screen is on top, and refuses `q` during
+    a recording.
+  - `_q()` queries the investigation screen regardless of which screen is showing.
+
+**Ultraviolet** (`theme.py`): the palette comes from the website's `tokens.css`, which shares `render.PALETTE`.
+- Violet `#7F5AF0` / `#8D6CFF` marks the brand, focus, selection and active tabs.
+- The near-black `#08060D` foundation has panels a few dark steps up.
+- Green, red and amber are used only for status, in the website's 4.5:1 ink values.
+- It's registered as a Textual theme so built-in widgets follow it, and a test checks darkness and contrast.
 
 Interaction model:
 - **Details follow focus.** A list's highlight updates the details pane only while that list has focus, and a focus

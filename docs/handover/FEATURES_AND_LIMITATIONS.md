@@ -21,25 +21,45 @@ Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. C
 
 ## Interactive app (`rewind ui`)
 
+Redesigned on `feat/ultraviolet-tui` for first-time users ([TUI_UX_AUDIT.md](TUI_UX_AUDIT.md)).
+
+**Journey**
+1. **Home:** record a program (primary), try the sample (when `demo/` is present), recent recordings.
+2. **Record**
+   - The form: command, label and watched variables, each with a short explanation, and a live preview of the
+     equivalent `rewind record`.
+   - Checks before anything runs (`rewind/recording.py: problems`): empty command, npm/npx/tsx instead of node, Node
+     not on PATH, a missing script (resolved like node: name, `.js/.mjs/.cjs`, folder index), invalid watched names,
+     missing `--watch` packages.
+   - While running: streamed output, and `esc` stops the program.
+   - At the end: the outcome in words, and "Open this run".
+3. **Investigate:** a run opens on the **Overview**: what happened, what to look at first, key findings, and what to do next.
+
 **What it shows**
-- Sidebar: runs (status, age, events) and the selected run's requests (completed / failed / cancelled / unanswered, from `pending`).
-- Main view, six tabs:
-  - **timeline:** story events, with search, kind filter, callback firings and every event (capped at 20 000 rows)
-  - **why:** for the selected story event, or the first error
-  - **pending**
-  - **state:** at the timeline's selected seq
-  - **tree:** for the selected request
-  - **diff:** a baseline run set with `b` against the selected run
-- Details pane: the focused item.
+- **Sidebar:** recordings, and the selected run's requests (answered / failed / no response / client gave up, from `pending`, with a legend).
+- **Main view**, seven tabs, each with a one-line description and its key:
+  - **Overview:** what happened and where to look first
+  - **Explain** (`why`): for the selected story event, or the first error
+  - **Timeline:** story events, with search, kind filter, callback starts and every event (capped at 20 000 rows)
+  - **Unfinished** (`pending`)
+  - **Variables** (`state`): at the timeline event you picked, or the first error until you pick one
+  - **Tree:** for the selected request
+  - **Compare** (`diff`): pick the other recording in place, or use `b` then `d`
+- **Findings** in every list are grouped: *Recorded* (observed), *Derived*, *Rewind's interpretation, not proven* (inferred).
+- **Details pane:** the focused item.
 
 **Evidence navigation:** every finding links to its evidence (enter, `]`, `[`), including diff evidence in the other run.
 
+**Look:** Ultraviolet, from the website's tokens: violet for the brand, focus and selection on a strictly dark foundation. Green, red and amber are used only for status.
+
 **Verified**
-- 16 pilot tests, including the real `App.run()` entry point and layouts at 80×24, 100×30, 130×40 and 180×50.
-- Screenshots reviewed at those sizes.
-- Launched and inspected in a real Windows Terminal window on Windows 11.
+- 27 pilot tests: empty home; successful, refused and stopped recordings; the sample; Overview to evidence; Compare; keyboard-only journey; help centered at 80×24, 120×36, 200×60; layouts at 80×24, 100×30, 130×40, 180×50; theme darkness and contrast; the real `App.run()` entry point.
+- Screenshots of every screen were reviewed.
+- Home, the investigation and Explain were inspected in a real Windows Terminal window on Windows 11.
 
 **Not verified:** the classic PowerShell 5.1 console (conhost), macOS and Linux terminals.
+
+**Recording limits:** the program runs without keyboard input (stdin is closed). On Windows, stopping terminates the program, so that run is stored as incomplete. npm scripts, tsx and similar launchers are refused, because the recorder must be preloaded into `node` itself.
 
 **Limits**
 - Runs load synchronously, so very large runs pause the UI while they load.

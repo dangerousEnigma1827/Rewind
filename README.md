@@ -201,26 +201,48 @@ To record your own program: `rewind record -- node app.js [args]` (or just `rewi
 rewind          # in a terminal: opens the interactive app (rewind ui does the same)
 ```
 
-A full-screen terminal app (Textual) over the same recordings and analysis as the commands:
-- **Sidebar:** runs and their requests (completed, failed, cancelled, unanswered).
-- **Main view:** **timeline**, **why**, **pending**, **state**, async **tree** and **diff**.
-- **Details pane:** follows whatever is selected: an event's request, callback, source line and values, or a
-  finding's evidence level and the events behind it.
+A full-screen terminal app (Textual) in Rewind's Ultraviolet look, over the same recordings and analysis as the
+commands. You don't need to know any command to use it:
 
-Select a finding and press **enter** to jump the timeline to its first evidence event. **]** and **[** walk through
-the rest. **b** marks a run as the diff baseline. **?** lists every key.
+1. **Home.**
+   - **Record a program** is the first action.
+   - **Try the sample** records the Phantom Discount demo, when you start Rewind in its folder.
+   - Recent recordings are listed below.
+2. **Record.**
+   - Type the command you normally use (`node server.js --port 3000`), and optionally a label and the variables to
+     watch. Each field says what it does, and the equivalent `rewind record` command is shown.
+   - Mistakes are explained before anything runs: a missing script, `npm start` instead of `node`, invalid variable
+     names, the `--watch` packages not installed.
+   - The program's output streams below, and `esc` stops it. **Open this run** takes you straight to the results.
+3. **Investigate.** A run opens on an **Overview**: what happened, what to look at first (errors, requests that
+   were never answered) and Rewind's key findings. The other views each explain themselves in one line:
+   - **Explain:** why an event happened, starting with the first error.
+   - **Timeline:** every event, in order.
+   - **Unfinished:** what never completed.
+   - **Variables:** watched values at any point.
+   - **Tree:** who scheduled what.
+4. **Evidence.** Findings are grouped by how certain they are: *Recorded*, *Derived*, and *Rewind's interpretation
+   (not proven)*. Select one and press **enter** to see its evidence in the timeline. **]** and **[** step through
+   the rest.
+5. **Compare.** Pick another recording to find the first point where the two runs differ.
 
 | keys | |
 |---|---|
-| `tab` / `1`–`4` | move between runs, requests, main view, details |
+| `n` `h` `?` `q` | record a program · home · help · quit |
+| `tab` / `1`–`4` | move between recordings, requests, main view, details |
 | `↑ ↓` `j k` `g G` | move within a list |
-| `t` `w` `p` `s` `e` `d` | timeline · why (the selected event, or the first error) · pending · state at the selected seq · tree · diff |
-| `/` `f` `c` `a` `esc` | search · kind filter · callback firings · every event · clear |
-| `enter` `]` `[` | open; jump to a finding's evidence and step through it |
-| `b` `r` `i` `\` `?` `q` | baseline · reload · details · sidebar · help · quit |
+| `o` `w` `t` `p` `s` `e` `d` | Overview · Explain · Timeline · Unfinished · Variables · Tree · Compare |
+| `/` `f` `c` `a` `esc` | search · kind filter · callback starts · every event · clear |
+| `enter` `]` `[` | open; show a finding's evidence and step through it |
+| `b` `r` `i` `\` | compare others against this run · reload · details · sidebar |
 
-The layout adapts to the terminal: three panes from 120 columns, details on demand (`i`) from 100, and stacked
-below 100. Piped or scripted (no terminal), bare `rewind` prints the landing screen instead and exits 2, as before.
+The layout adapts to the terminal:
+- three panes from 150 columns, with narrower side panes from 120
+- details on demand (`i`) from 100
+- stacked below 100
+- on short terminals Home drops the banner, so the actions and recent runs fit at 80×24
+
+Piped or scripted (no terminal), bare `rewind` prints the landing screen instead and exits 2, as before.
 
 ---
 
