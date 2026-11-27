@@ -2,7 +2,7 @@
 
 Back to [HANDOVER.md](HANDOVER.md). The test suite, the test-count history, the M0 experiments, M7 fresh-clone verification, and the terminal compatibility matrix. Bugs found in testing, with root causes and fixes, are in [ENGINEERING_LOG.md](ENGINEERING_LOG.md#3-bug-fix-and-verification-record).
 
-**Latest result:** 74 / 74 on Windows 11 (Python 3.15.2, Node 24.22.1) at `f2aca36` on `feat/recording-reliability` (not run on Linux for this branch). Before that: 54 / 54 on Windows 11 and Ubuntu 24.04 under WSL2 at `6320276`; `main` has 56. The tables below describe the suite at `6320276`; the extended-window additions are listed after them.
+**Latest result:** 102 / 102 on Windows 11 (Python 3.15.2, Node 24.22.1, Textual 8.2.8) on `feat/rewind-tui`; 86 on `feat/watched-state`; 74 at `f2aca36` on `feat/recording-reliability` (none run on Linux). Before that: 54 / 54 on Windows 11 and Ubuntu 24.04 under WSL2 at `6320276`; `main` has 56. The tables below describe the suite at `6320276`; the extended-window additions are listed after them.
 
 ## Test suite (verified by reading `tests/`)
 
@@ -34,7 +34,24 @@ The F2 and F3 tests were run against the code before the change and seen to fail
 | `f2aca36` F12 | `test_recorder.py` | values recorded safely (alias write visible, circular/BigInt/throwing getter → `[unserialisable …]`, undeclared name skipped, stdout, exit code and stack lines unchanged); one snapshot per uncaught error, tied by seq; none without `--watch` |
 | `f2aca36` F12 | `test_analysis.py` | `why` reports values and derives an unrecorded change; demo snapshot matches the last write; no snapshot findings without `--watch` |
 
-New fixtures: `fork_parent.js`, `cluster_primary.js`, `stall.js`, `snapshot.js`.
+| `c7cf869` F11 | `test_recorder.py` | exact read set (shorthand, `new` callee, `typeof`, compound right-hand side, shadowing, per-callback dedupe); reads off and capped; TDZ read throws as before |
+| `c7cf869` F11 | `test_analysis.py` | the crash cites the failing read; the silent overcharge is derived from #2's read (and stays "not proven" with `REWIND_READS=0`); overwrites after a read, or with no read at all, are never called a race |
+| `29b6bc3` F14 | `test_analysis.py` | state from writes and reads; partial after property writes; an alias change revealed by the next read; interleaved requests in the demo; write cap → unknown; incomplete recording; no `--watch` |
+| `29b6bc3` F14 | `test_cli.py` | `rewind at` end to end, bad seq, `-N` run ref |
+| `401b7aa`, `d6b36be` TUI | `test_tui.py` | 16: markup resolution; empty home (welcome, nothing created); incomplete run; run/request/timeline navigation; why → evidence jumps with `]` `[`; filter widening; state, pending, tree; diff across runs with evidence in run A; no-watch / no-error runs; search and filters; help; layouts at 80×24, 100×30, 130×40, 180×50; the real `App.run()` entry point |
+
+New fixtures: `fork_parent.js`, `cluster_primary.js`, `stall.js`, `snapshot.js`, `reads.js`, `reads_http.js`, `tdz_read.js`, `state.js`.
+
+**Measured (F11):**
+- Reads: about 15 ns per repeated read (a 1M-iteration hot loop went from ~7 ms to ~22 ms).
+- 20k separate callbacks reading once each: no measurable time difference, 10k read events (the cap).
+- The demo: +3 events.
+- Without `--watch` nothing changes (the E6 workload measured 1.39 s on `main` vs 1.44 s, within noise, after Part 2).
+
+**Visual and real-terminal checks (TUI):**
+- Screenshots of every view were rendered headless at 80×24 to 170×46 and reviewed.
+- The app was launched in a real Windows Terminal window on Windows 11 and captured. That run found two bugs the headless tests could not: the `App.run()` shadowing and the emoji-width `✖`.
+- The classic PowerShell 5.1 console (conhost) was not checked for the TUI.
 
 ## Test count history
 

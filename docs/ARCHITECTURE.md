@@ -91,6 +91,30 @@ need it are left out rather than computed from the wrong code. Runs ingested bef
   - Callbacks with no observable effect are excluded, because Node's HTTP date-cache timer fires nondeterministically.
   - The token streams are aligned with `difflib.SequenceMatcher`, and the report covers the first divergence, whether the divergent step merely moved, and the reordered / only-A / only-B counts.
 
+## Interactive app (`rewind/tui/`)
+
+`rewind ui`, or bare `rewind` on an interactive terminal, opens a Textual app. It adds no debugging logic:
+- `app.py` reads through `store` (a read-only `Session`, which never creates `REWIND_HOME`) and calls the same
+  analysis functions as the commands: `Run`, `investigate`, `pending`, `state_at`, `build_tree`, `diff`.
+- `views.py` turns their results into Rich renderables.
+- `render.py`'s markup helpers (`event_row`, `event_text`, `tree_label`, `LEVEL`, `req_tag`) are shared. `render.rich_text`
+  resolves their named styles against the TUI palette in `theme.py`, so one piece of markup renders in both worlds.
+
+Interaction model:
+- **Details follow focus.** A list's highlight updates the details pane only while that list has focus, and a focus
+  change re-renders details for the newly focused item.
+- **Evidence navigation:** a finding's evidence seqs are walked with enter / `]` / `[`. `jump(seq)` widens the timeline
+  filters only as far as needed: search and kind first, then the request, then "every event". For diff findings it
+  first opens the run (A or B) the evidence belongs to.
+- **Responsive layout** comes from screen classes set on resize:
+  - three panes at 150+ columns
+  - `-medium` at 120–149
+  - `-compact` at 100–119: details on demand, and showing them hides the sidebar
+  - `-narrow` below 100: stacked, details on demand
+  - `-short` for short terminals
+- **Glyphs:** the classic-console glyph fallback from the CLI applies. `✖` is drawn as `×` because Windows Terminal renders
+  U+2716 from an emoji font, two cells wide.
+
 ## Testing
 
 `pytest` runs real `node` processes:
@@ -99,6 +123,8 @@ need it are left out rather than computed from the wrong code. Runs ingested bef
 - analysis on recordings of the actual demo (`test_analysis.py`), including invariants that every inference cites evidence, every evidence seq exists, and every observed "write" claim is backed by a mutation event
 - the CLI end to end (`test_cli.py`)
 - presentation: landing screen, help, colour handling, narrow terminals, palette contrast, console-font fallback (`test_render.py`)
+- the interactive app, driven headless with Textual's pilot over real demo recordings: navigation, evidence jumps, diff
+  across runs, empty and incomplete recordings, four terminal sizes, and the real `App.run()` entry point (`test_tui.py`)
 
 ## Terminal presentation
 

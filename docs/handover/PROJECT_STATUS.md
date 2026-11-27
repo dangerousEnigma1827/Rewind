@@ -12,8 +12,13 @@ As of 2026-11-23, plus the extended-window work of 2026-11-27 (section below). B
 | 2 | F12 error-time snapshots of watched values; derived "changed by a write `--watch` doesn't see" | `f2aca36` | 5 |
 | 3 (`feat/watched-state`) | F11 watched reads: `read` events; `why` cites the read and derives "read request #N's value", or rules the race out | `c7cf869` | 6 (+1 changed: the silent overcharge is no longer "not proven" when reads exist) |
 | 3 (`feat/watched-state`) | F14 `rewind at RUN SEQ`: watched state from recorded evidence; known / partial / unknown, never assumed | `29b6bc3` | 6 |
+| 4 (`feat/rewind-tui`) | shared render helpers for CLI and TUI (no CLI output change) | `0d7e2a6` | — |
+| 4 (`feat/rewind-tui`) | `rewind ui` / bare `rewind`: the Textual investigation app | `401b7aa` | 15 |
+| 4 (`feat/rewind-tui`) | non-wrapping rows, compact layout | `21707b9` | — |
+| 4 (`feat/rewind-tui`) | fix: `self.run` shadowed `App.run()`; found by launching in a real terminal | `d6b36be` | 1 |
+| 4 (`feat/rewind-tui`) | one-cell failure glyph for Windows Terminal | `095aeef` | — |
 
-Suite: **74 passed** on Windows 11, Python 3.15.2, Node 24.22.1 (56 on `main` before this branch). The full Phantom Discount walkthrough (7 steps plus `pending`) was re-run on the branch. Recorder overhead on the E6 workload, 9 interleaved runs: `main` 1.39 s vs branch 1.44 s median (baseline 0.61 s), within noise. Not run on Linux or macOS for this branch. Details per feature: [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md), [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
+Suite: **74 passed** at the end of Part 2, **86** after Part 3 and **102** on `feat/rewind-tui`, on Windows 11, Python 3.15.2, Node 24.22.1 (56 on `main` before this work). Branches stack: `main` ← `feat/recording-reliability` ← `feat/watched-state` ← `feat/rewind-tui`. None is pushed or merged. The full Phantom Discount walkthrough (7 steps plus `pending`) was re-run on the branch. Recorder overhead on the E6 workload, 9 interleaved runs: `main` 1.39 s vs branch 1.44 s median (baseline 0.61 s), within noise. Not run on Linux or macOS for this branch. Details per feature: [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md), [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Branch and commit state
 

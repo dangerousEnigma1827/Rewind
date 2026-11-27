@@ -5,3 +5,4 @@ __pycache__/
 spikes/out/
 node_modules/
 *.egg-info/
+build/

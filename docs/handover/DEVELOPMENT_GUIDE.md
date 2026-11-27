@@ -29,7 +29,7 @@ rewind/                     repo root
 ├─ spikes/                  M0 experiments + RESULTS.md (evidence, not shipped)
 ├─ docs/ARCHITECTURE.md     concise architecture
 ├─ docs/handover/           this handover set
-├─ pyproject.toml           typer>=0.12, rich>=13; dev: pytest>=8; script `rewind`
+├─ pyproject.toml           typer>=0.12, rich>=13, textual>=8.2 (the TUI); dev: pytest>=8; script `rewind`
 ├─ .gitignore               .venv/ .rewind/ __pycache__/ *.pyc spikes/out/ node_modules/ *.egg-info/
 └─ README.md
 ```
@@ -123,6 +123,8 @@ Request numbering: #1 is the `/health` check, so orders are #2–#4.
 pytest                   # full suite; spawns real node processes
 pytest --collect-only -q # count items
 pytest tests/test_recorder.py -k keepalive
+pytest tests/test_tui.py # the interactive app, headless (Textual pilot); records the demo once per module
+rewind ui                # the app itself; needs a real terminal (bare `rewind` too, when stdin/stdout are a TTY)
 ```
 
 Run from the repo root with the venv active and `node` on PATH. Tests set their own `REWIND_HOME` in temp dirs. `--watch` tests need `recorder/node_modules`.

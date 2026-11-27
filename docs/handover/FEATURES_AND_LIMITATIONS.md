@@ -15,8 +15,36 @@ Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. C
 | `rewind tree [RUN]` | `-r/--request N`, `--full` | Async causality tree ("who scheduled whom"). Quiet branches pruned and internal hops folded unless `--full`; reports how much it hid. |
 | `rewind why [RUN]` | `-e/--error N` (default 1), `-s/--seq SEQ`, `--evidence` | Causal investigation of error N, or of any event by seq. |
 | `rewind diff A B` | `--all`, `--evidence` | Aligns two runs and finds the first divergence. `--all` includes callbacks outside any request (harness/plumbing). |
+| `rewind ui` (or bare `rewind` on an interactive terminal) | — | The interactive app: runs, requests, timeline, why, pending, state, tree and diff, with evidence navigation. Piped or scripted, bare `rewind` still prints the landing screen and exits 2. Keys: `?` in the app, or the README. |
 | `rewind at RUN SEQ` | `--evidence` | Watched variables' state at event SEQ, from recorded writes, reads and snapshots only (see below). Not on the landing screen (80×24 limit). |
 | `rewind pending [RUN]` | `--evidence` | What never finished: requests without a response and the unfinished operations they waited on. Not on the landing screen, which is at its 80×24 limit. |
+
+## Interactive app (`rewind ui`)
+
+**What it shows**
+- Sidebar: runs (status, age, events) and the selected run's requests (completed / failed / cancelled / unanswered, from `pending`).
+- Main view, six tabs:
+  - **timeline:** story events, with search, kind filter, callback firings and every event (capped at 20 000 rows)
+  - **why:** for the selected story event, or the first error
+  - **pending**
+  - **state:** at the timeline's selected seq
+  - **tree:** for the selected request
+  - **diff:** a baseline run set with `b` against the selected run
+- Details pane: the focused item.
+
+**Evidence navigation:** every finding links to its evidence (enter, `]`, `[`), including diff evidence in the other run.
+
+**Verified**
+- 16 pilot tests, including the real `App.run()` entry point and layouts at 80×24, 100×30, 130×40 and 180×50.
+- Screenshots reviewed at those sizes.
+- Launched and inspected in a real Windows Terminal window on Windows 11.
+
+**Not verified:** the classic PowerShell 5.1 console (conhost), macOS and Linux terminals.
+
+**Limits**
+- Runs load synchronously, so very large runs pause the UI while they load.
+- The "every event" timeline shows at most 20 000 rows.
+- The state view isn't navigable: it follows the timeline cursor, and you press `s` to refresh it.
 
 ## State at a point (`at`, F14)
 

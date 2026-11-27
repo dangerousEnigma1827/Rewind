@@ -193,8 +193,34 @@ rewind record -l good -w currentCart -- node demo/traffic.js --sequential
 rewind diff good bad                                           # where the two executions part ways
 ```
 
-To record your own program: `rewind record -- node app.js [args]` (or just `rewind record app.js`). Running bare
-`rewind` opens a landing screen with your recorded runs and the commands.
+To record your own program: `rewind record -- node app.js [args]` (or just `rewind record app.js`).
+
+### Investigate interactively
+
+```sh
+rewind          # in a terminal: opens the interactive app (rewind ui does the same)
+```
+
+A full-screen terminal app (Textual) over the same recordings and analysis as the commands:
+- **Sidebar:** runs and their requests (completed, failed, cancelled, unanswered).
+- **Main view:** **timeline**, **why**, **pending**, **state**, async **tree** and **diff**.
+- **Details pane:** follows whatever is selected: an event's request, callback, source line and values, or a
+  finding's evidence level and the events behind it.
+
+Select a finding and press **enter** to jump the timeline to its first evidence event. **]** and **[** walk through
+the rest. **b** marks a run as the diff baseline. **?** lists every key.
+
+| keys | |
+|---|---|
+| `tab` / `1`–`4` | move between runs, requests, main view, details |
+| `↑ ↓` `j k` `g G` | move within a list |
+| `t` `w` `p` `s` `e` `d` | timeline · why (the selected event, or the first error) · pending · state at the selected seq · tree · diff |
+| `/` `f` `c` `a` `esc` | search · kind filter · callback firings · every event · clear |
+| `enter` `]` `[` | open; jump to a finding's evidence and step through it |
+| `b` `r` `i` `\` `?` `q` | baseline · reload · details · sidebar · help · quit |
+
+The layout adapts to the terminal: three panes from 120 columns, details on demand (`i`) from 100, and stacked
+below 100. Piped or scripted (no terminal), bare `rewind` prints the landing screen instead and exits 2, as before.
 
 ---
 
@@ -202,6 +228,7 @@ To record your own program: `rewind record -- node app.js [args]` (or just `rewi
 
 | command | what it does |
 |---|---|
+| `rewind` / `rewind ui` | the interactive app (bare `rewind` opens it only on an interactive terminal) |
 | `rewind record [-l LABEL] [-w VAR,...] -- node app.js [args]` | runs the program with the recorder preloaded, stores the run, and passes the program's exit code through |
 | `rewind runs` | lists recorded runs, newest first |
 | `rewind timeline [RUN] [-r N] [-k KINDS] [-c] [--raw]` | the run's story; `-r` shows one request, `-k log,http,error,mutation,async,run` filters by kind, `-c` adds every user callback firing, `--raw` shows every recorded event |
@@ -232,8 +259,10 @@ every option.
 ```
 recorder/     Node.js side: recorder.js (async_hooks, console, http, errors, NDJSON output)
               and instrument.js (the --watch AST rewrite; acorn + magic-string, loaded only with --watch)
-rewind/       Python side: store.py (SQLite ingest, run lookup), analysis.py (attribution, tree, why, diff),
-              render.py (terminal output), cli.py (Typer commands)
+rewind/       Python side: store.py (SQLite ingest, run lookup), analysis.py (attribution, tree, why, pending,
+              state, diff), render.py (terminal output), cli.py (Typer commands)
+rewind/tui/   the interactive app: app.py (Textual), views.py (renderables built from analysis results),
+              theme.py (palette and layout CSS)
 demo/         the Phantom Discount demo: checkout.js, traffic.js, prices.json, fix.patch
 tests/        pytest suite; most tests run real node processes end to end
 spikes/       the feasibility experiments (E0–E7) behind each design decision, with results
@@ -245,13 +274,15 @@ docs/         ARCHITECTURE.md, assets/ (the architecture diagram), and handover/
 ## Testing and verification
 
 ```sh
-pytest        # 56 tests; most run real node processes end to end
+pytest        # 102 tests; most run real node processes end to end, the TUI ones drive the app headless
 ```
 
 | environment | result |
 |---|---|
-| Windows 11, Python 3.15.2, Node.js 24.22.1 | 56 / 56 passed |
-| Ubuntu 24.04 on WSL2, Python 3.12.3, Node.js 24.22.2 | 56 / 56 passed |
+| Windows 11, Python 3.15.2, Node.js 24.22.1 (current branch) | 102 / 102 passed |
+| Ubuntu 24.04 on WSL2, Python 3.12.3, Node.js 24.22.2 (at 56 tests, before the extended-window work) | 56 / 56 passed |
+
+The TUI was also launched in a real Windows Terminal window on Windows 11 and checked visually.
 
 Also checked:
 - The 39 feasibility checks in `spikes/check.py` pass.
