@@ -9,9 +9,9 @@ A causal "why did this happen" debugger for Node.js, built for a 48-hour hackath
 A Node recorder (`node --require recorder/recorder.js`) writes execution events as NDJSON;
 a Python CLI (`rewind`) ingests them into SQLite and answers *why* questions:
 which request an error belonged to, who scheduled the failing callback, what writes to watched
-state preceded it, and where a failing run diverged from a good one. Writes are recorded only for
-variables named with `--watch`, and reads are not recorded, so a link from a write to the failure
-is reported as inferred. Every finding is labelled
+state preceded it, and where a failing run diverged from a good one. Writes and (since F11) reads are
+recorded only for variables named with `--watch`. "Request #2 read request #3's value" is derived from
+them; that this caused the failure is reported as inferred. Every finding is labelled
 **observed ●**, **derived ◆** or **inferred ?**.
 
 ## Current state (one paragraph)

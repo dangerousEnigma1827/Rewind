@@ -149,7 +149,8 @@ def test_mutations_capture_exactly_documented_set(record):
     # line numbers in user stack traces are unchanged by instrumentation
     err = r.kind("error.uncaught")[0]
     assert err["stack"][0]["line"] == 16 and "mutations.js:16" in r.stderr
-    assert r.kind("instrument")[0]["data"] == {"file": "tests/fixtures/mutations.js", "writes": 7, "watch": ["currentCart"]}
+    # read sites: the alias (7), the compound right-hand side (9), the destructuring target's object (11), the timer (16)
+    assert r.kind("instrument")[0]["data"] == {"file": "tests/fixtures/mutations.js", "writes": 7, "reads": 4, "watch": ["currentCart"]}
 
 
 def test_mutation_carries_writer_context(record):
@@ -162,6 +163,40 @@ def test_mutation_cap(record):
     assert r.stdout == "counter 50\n"
     assert len(r.kind("mutation")) == 10 and len(r.kind("mutation.capped")) == 1
     assert r.events[-1]["data"]["mutations"] == {"counter": 50}
+
+
+def test_reads_capture_exactly_the_references(record):
+    plain = record("reads.js", recorder=False)
+    r = record("reads.js", {"REWIND_WATCH": "cart,Ctor"})
+    assert r.code == plain.code == 0 and r.stdout == plain.stdout  # behaviour unchanged
+    got = [(e["name"], e["data"]["loc"].rsplit("/", 1)[1]) for e in r.kind("read")]
+    assert got == [("Ctor", "reads.js:7:15"),                                 # new Ctor(1)
+                   ("cart", "reads.js:4:51"), ("cart", "reads.js:4:80"),      # loop: once per site per callback run
+                   ("cart", "reads.js:9:14"),                                 # right-hand side; the write root isn't a read
+                   ("cart", "reads.js:11:21"),                                # typeof
+                   ("cart", "reads.js:6:32"),                                 # {cart} shorthand
+                   ("cart", "reads.js:13:59"),                                # w.cart === cart
+                   ("cart", "reads.js:14:50")]                                # again in a later callback run
+    # not reads: declarations, the shadowed local in shadow(), write targets, `delete`, the second total() call
+    # (same sites, same callback run)
+    assert r.kind("read")[1]["data"]["value"] == '{"items":[{"price":3},{"price":4}],"total":0}'
+    assert r.kind("instrument")[0]["data"]["reads"] == 8 and r.events[-1]["data"]["reads"] == {"cart": 7, "Ctor": 1}
+    assert r.kind("read")[-1]["eid"] != r.kind("read")[0]["eid"]  # the timer's read carries its own context
+
+
+def test_reads_can_be_turned_off_and_are_capped(record):
+    off = record("reads.js", {"REWIND_WATCH": "cart", "REWIND_READS": "0"})
+    assert not off.kind("read") and off.kind("mutation") and off.kind("run.start")[0]["data"]["reads"] is False
+    capped = record("reads.js", {"REWIND_WATCH": "cart", "REWIND_READ_CAP": "3"})
+    assert len(capped.kind("read")) == 3 and len(capped.kind("read.capped")) == 1
+    assert capped.events[-1]["data"]["reads"] == {"cart": 7}  # counting continues past the cap
+
+
+def test_read_values_are_safe_in_the_temporal_dead_zone(record):
+    r = record("tdz_read.js", {"REWIND_WATCH": "late"})
+    plain = record("tdz_read.js", recorder=False)
+    assert r.code == plain.code and r.stdout == plain.stdout == "ReferenceError\n"
+    assert not r.kind("read")  # the binding threw before __rw.r ran: nothing was read
 
 
 SNAP_WATCH = {"REWIND_WATCH": "currentCart,count,circular,trap,big,missing"}

@@ -104,7 +104,7 @@ node demo/traffic.js                                       # TypeError reading '
 rewind record -l bad -w currentCart -- node demo/traffic.js
 rewind timeline bad                                        # 3 interleaved orders, 3 writes; "A-101: charged $161" (should be $128)
 rewind why bad                                             # thrown in applyDiscount; request #3 (B-202); overwritten by #4
-rewind why bad --seq <seq of the A-101 log line>           # silent overcharge; race marked not proven
+rewind why bad --seq <seq of the A-101 log line>           # silent overcharge: #2's read of #3's cart (with REWIND_READS=0: not proven)
 rewind record -l nowatch -- node demo/traffic.js
 rewind why nowatch                                         # suspects shared state, recommends --watch
 rewind record -l good -w currentCart -- node demo/traffic.js --sequential

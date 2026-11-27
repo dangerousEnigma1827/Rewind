@@ -98,7 +98,9 @@ first: [spikes/RESULTS.md](spikes/RESULTS.md).
 
 Rewind won't claim what it didn't see:
 - **Without `--watch`, it claims no writes.** It only says shared state is suspected.
-- **Reads are never recorded,** so a conclusion that relies on one is always marked inferred.
+- **Only reads of watched variables are recorded,** and only in code `--watch` instruments. "Request #2 read
+  request #3's value" is derived from those reads and the recorded writes. The claim that this *caused* the bug
+  is always marked inferred.
 
 ---
 
@@ -139,8 +141,8 @@ changed the cart, or that $161 is wrong. `rewind why` does:
 *(An excerpt from one real run. Run ids, `seq` numbers and event counts differ between runs.)*
 
 Two more views complete the story:
-- `rewind why --seq` explains the silent $161 overcharge, and says "Reads are not recorded, so this is not proven."
-- `rewind diff good bad` against a sequential run shows the same code path with a different interleaving.
+- `rewind why --seq` explains the silent $161 overcharge. ● #2 read `currentCart` at `checkout.js:23` and got
+  B-202's cart. ◆ The last recorded write before that read was request #3's, so #2 read #3's value.- `rewind diff good bad` against a sequential run shows the same code path with a different interleaving.
 
 `demo/fix.patch` keeps the cart per request. With it applied, all three totals are correct and `rewind why`
 reports no errors.
@@ -215,6 +217,8 @@ every option.
 | `REWIND_HOME` | `./.rewind` | database (`rewind.db`) and raw NDJSON recordings (`runs/`) |
 | `REWIND_PROMISE_STACKS` | `1` | `0` skips promise creation stacks: about 1.9× → 1.1× overhead on the benchmark below, but `async` function names are lost in chains |
 | `REWIND_MUT_CAP` | `10000` | recorded writes per watched variable |
+| `REWIND_READS` | `1` | `0` stops recording reads of watched variables (writes are still recorded) |
+| `REWIND_READ_CAP` | `10000` | recorded reads per watched variable, after per-callback deduplication |
 | `NO_COLOR` | unset | any value turns colour off; the layout and the ● ◆ ? marks stay. Piped output never has colour |
 
 ---
@@ -258,7 +262,7 @@ Also checked:
 
 ## Limitations
 
-Rewind records the **causal skeleton** of a run: async lifecycle, HTTP requests, logs, errors and watched writes.
+Rewind records the **causal skeleton** of a run: async lifecycle, HTTP requests, logs, errors, and watched writes and reads.
 It records execution facts as they happen and analyses them afterwards. It doesn't replay execution or step
 backwards, doesn't capture every function call or variable value, can't set breakpoints, and has no web UI.
 
@@ -275,8 +279,14 @@ a watched variable declared at the top level of that file is recorded. That cove
 - files under `node_modules`;
 - ES modules (`.mjs`, `"type": "module"`);
 - mutations made inside functions the value is passed to;
-- same-named local variables (skipped on purpose);
-- **reads**: never recorded.
+- same-named local variables (skipped on purpose).
+
+**Reads.** Every expression that reads a watched variable is recorded too: its location, the callback and request
+it ran in, and the value read. Declarations, write targets and `delete x` aren't reads. A read is recorded once
+per source location per callback run, so a hot loop produces one event, not millions. Measured cost: about
+15 ns per repeated read in a 1M-iteration loop. Reads through an alias made earlier (`const c = currentCart`
+records only the read that creates `c`) and reads in uninstrumented code aren't seen. `REWIND_READS=0` turns
+reads off, and `REWIND_READ_CAP` (default 10 000) caps them per variable.
 
 So "this overwrite caused the failure" is always marked inferred. Values are JSON previews of up to 200
 characters. A value JSON can't represent (circular, BigInt, a throwing getter) is recorded as `[unserialisable Type]`.

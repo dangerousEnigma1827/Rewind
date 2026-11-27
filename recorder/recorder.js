@@ -16,6 +16,9 @@ if (OUT && !globalThis.__rewind) {
   const PROMISE_STACKS = process.env.REWIND_PROMISE_STACKS !== '0';
   const WATCH = (process.env.REWIND_WATCH || '').split(',').map(s => s.trim()).filter(Boolean);
   const MUT_CAP = +process.env.REWIND_MUT_CAP || 10000; // per watched name
+  const READS = process.env.REWIND_READS !== '0';         // record reads of watched names (with --watch)
+  const READ_CAP = +process.env.REWIND_READ_CAP || 10000; // per watched name, after per-callback dedupe
+  const readSeen = new Set(); // read locations already recorded in the current callback run
   const HERE = __dirname;
   const CWD = process.cwd();
 
@@ -96,7 +99,7 @@ if (OUT && !globalThis.__rewind) {
           ...(type === 'Timeout' && res ? { data: { delay: res._idleTimeout } } : {}) }); // due time: overdue vs not yet due
       });
     },
-    before(aid) { guarded(() => emit('async.before', { aid })); },
+    before(aid) { if (readSeen.size) readSeen.clear(); guarded(() => emit('async.before', { aid })); },
     after(aid) { guarded(() => emit('async.after', { aid })); },
     promiseResolve(aid) { guarded(() => emit('async.resolve', { aid })); },
   }).enable();
@@ -185,7 +188,7 @@ if (OUT && !globalThis.__rewind) {
   };
 
   // ---- mutation tracking (opt-in; AST deps loaded only here) -------------------
-  const mutCount = Object.create(null);
+  const mutCount = Object.create(null), readCount = Object.create(null);
   if (WATCH.length) {
     const { installHook } = require('./instrument');
     const registry = []; // [file, {name: getter}] per instrumented file, registered when its module body finishes
@@ -203,9 +206,18 @@ if (OUT && !globalThis.__rewind) {
         else if (n === MUT_CAP + 1) guarded(() => emit('mutation.capped', { name, data: { cap: MUT_CAP } }));
         return value;
       },
+      // A read is recorded once per source location per callback run (a hot loop emits one event, not N).
+      r(name, loc, value) {
+        if (inHook || readSeen.has(loc)) return value;
+        readSeen.add(loc);
+        const n = readCount[name] = (readCount[name] || 0) + 1;
+        if (n <= READ_CAP) guarded(() => emit('read', { name, data: { loc, value: read(() => value) } }));
+        else if (n === READ_CAP + 1) guarded(() => emit('read.capped', { name, data: { cap: READ_CAP } }));
+        return value;
+      },
       get: read,
     };
-    installHook(WATCH, msg => guarded(() => emit('instrument', msg)));
+    installHook(WATCH, msg => guarded(() => emit('instrument', msg)), { reads: READS });
   }
   function preview(v) {
     if (typeof v === 'function') return `[Function ${v.name || 'anonymous'}]`;
@@ -220,9 +232,9 @@ if (OUT && !globalThis.__rewind) {
 
   // ---- lifecycle ---------------------------------------------------------------
   emit('run.start', { data: { run: process.env.REWIND_RUN_ID || null, argv: process.argv.slice(1).map(relFile), cwd: CWD,
-    node: process.version, pid: process.pid, watch: WATCH, promise_stacks: PROMISE_STACKS } }, true);
+    node: process.version, pid: process.pid, watch: WATCH, reads: WATCH.length > 0 && READS, promise_stacks: PROMISE_STACKS } }, true);
   process.on('exit', code => {
-    guarded(() => emit('run.end', { data: { code, mutations: mutCount, ast_loaded: Object.keys(require.cache).some(k => /[\\/]acorn[\\/]/.test(k)) } }));
+    guarded(() => emit('run.end', { data: { code, mutations: mutCount, reads: readCount, ast_loaded: Object.keys(require.cache).some(k => /[\\/]acorn[\\/]/.test(k)) } }));
     flush(); closed = true;
     try { fs.closeSync(fd); } catch {}
   });

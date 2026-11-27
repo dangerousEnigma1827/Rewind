@@ -13,12 +13,14 @@ def load(record, rewind_home, fx, env=None, rid="r", **kw):
 
 @pytest.fixture
 def demo(record, rewind_home):
-    def _demo(sequential=False, watch=True):
+    def _demo(sequential=False, watch=True, reads=True):
         fx = "../../demo/traffic.js"
         env = {"REWIND_WATCH": "currentCart"} if watch else {}
         if sequential:
             env["DEMO_SEQUENTIAL"] = "1"
-        return load(record, rewind_home, fx, env, rid=f"d{int(sequential)}{int(watch)}")
+        if not reads:
+            env["REWIND_READS"] = "0"
+        return load(record, rewind_home, fx, env, rid=f"d{int(sequential)}{int(watch)}{int(reads)}")
     return _demo
 
 
@@ -112,8 +114,22 @@ def test_why_without_watch_never_claims_a_mutation(demo):
     assert len(inf) == 1 and "--watch currentCart" in inf[0] and "suspected" in inf[0]
 
 
-def test_why_on_silent_overcharge_is_hedged(demo):
+def test_why_on_silent_overcharge_uses_the_recorded_read(demo):
     run = demo()
+    log = next(e for e in run.events if e.kind == "log" and "A-101" in e.name)
+    inv = A.investigate(run, log)
+    assert_evidence_integrity(run, inv)
+    rd = [f for f in inv.findings if f.level == A.OBSERVED and "read `currentCart` at demo/checkout.js:23" in f.text]
+    assert len(rd) == 1 and run.by_seq[rd[0].evidence[0]].kind == "read" and '"B-202"' in rd[0].text  # #3's cart
+    der = [f for f in inv.findings if f.level == A.DERIVED and "it read request #3's value" in f.text]
+    assert len(der) == 1 and [run.by_seq[s].kind for s in der[0].evidence] == ["mutation", "mutation", "read"]
+    inf = levels(inv, A.INFERRED)
+    assert len(inf) == 1 and "#2 POST /order computed with request #3's data" in inf[0] and "not proven" not in inf[0]
+
+
+def test_why_on_silent_overcharge_is_hedged_without_reads(demo):
+    run = demo(reads=False)
+    assert not run.reads_recorded and not any(e.kind == "read" for e in run.events)
     log = next(e for e in run.events if e.kind == "log" and "A-101" in e.name)
     inv = A.investigate(run, log)
     assert_evidence_integrity(run, inv)
@@ -168,6 +184,34 @@ def test_diff_good_vs_bad_points_at_the_interleaving(demo):
     # harness callbacks are out of scope by default, present with everything=True
     assert all(t.startswith(("#", "run.end", "log", "error")) for t, _ in res.a + res.b)
     assert len(A.tokens(bad, everything=True)) > len(res.b)
+
+
+# ---- watched reads (F11) -------------------------------------------------------------
+def test_why_on_the_crash_cites_the_failing_read(demo):
+    run = demo()
+    inv = A.investigate(run, run.errors[0])
+    assert_evidence_integrity(run, inv)
+    rd = next(f for f in inv.findings if f.level == A.OBSERVED and "read `currentCart`" in f.text)
+    read = run.by_seq[rd.evidence[0]]
+    assert read.kind == "read" and read.eid == run.errors[0].eid and read.data["loc"].startswith("demo/checkout.js:23:")
+    assert '"C-303"' in rd.text  # the cart #4 wrote
+    assert any("it read request #4's value" in t for t in levels(inv, A.DERIVED))
+    inf = [f for f in inv.findings if f.level == A.INFERRED]
+    assert len(inf) == 1 and inf[0].text == A.RACE_INFERENCE and read.seq in inf[0].evidence
+
+
+def test_overwrites_that_reach_no_read_are_not_called_a_race(record, rewind_home):
+    run = load(record, rewind_home, "reads_http.js", {"REWIND_WATCH": "shared"})
+    early = next(e for e in run.events if e.kind == "log" and e.name.startswith("early saw"))
+    assert early.name == "early saw /early"  # ground truth: it saw its own value
+    inv = A.investigate(run, early)
+    assert_evidence_integrity(run, inv)
+    assert any("overwrote it" in t for t in levels(inv, A.DERIVED))  # the overwrites did happen...
+    assert any("can't explain that read" in t for t in levels(inv, A.DERIVED))  # ...after its read
+    assert not levels(inv, A.INFERRED)
+    blind = A.investigate(run, next(e for e in run.events if e.kind == "log" and e.name == "blind done"))
+    assert_evidence_integrity(run, blind)
+    assert any("no read of `shared`" in t for t in levels(blind, A.DERIVED)) and not levels(blind, A.INFERRED)
 
 
 # ---- error-time snapshots (F12) ------------------------------------------------------

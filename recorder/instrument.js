@@ -63,21 +63,23 @@ function rootAndPath(node, src) {
     } else parts.unshift('.' + (node.property.name || node.property.value));
     node = node.object;
   }
-  return node.type === 'Identifier' ? { root: node.name, path: parts.join(''), pure } : null;
+  return node.type === 'Identifier' ? { root: node.name, node, path: parts.join(''), pure } : null;
 }
 
-function instrument(src, file, watch) {
+function instrument(src, file, watch, { reads: withReads = true } = {}) {
   const ast = acorn.parse(src, { ecmaVersion: 'latest', sourceType: 'script', allowReturnOutsideFunction: true,
     allowHashBang: true, locations: true });
   const top = new Set(declaredIn(ast));
   const targets = new Set(watch.filter(w => top.has(w)));
-  if (!targets.size) return { code: src, writes: 0, names: [] };
+  if (!targets.size) return { code: src, writes: 0, reads: 0, names: [] };
   const ms = new MagicString(src);
   const rel = path.relative(process.cwd(), file).split(path.sep).join('/');
-  let writes = 0;
+  let writes = 0, reads = 0;
+  const writeRoots = new Set(); // the identifier at the root of each wrapped write target: a write, not a read
   const wrap = (n, target, op, anc) => {
     const rp = rootAndPath(target, src);
     if (!rp || !targets.has(rp.root) || shadowed(rp.root, anc)) return;
+    writeRoots.add(rp.node);
     const tsrc = src.slice(target.start, target.end);
     const reread = rp.pure ? `()=>(${tsrc})` : 'null';
     const before = rp.pure ? `__rw.get(${reread})` : 'undefined';
@@ -96,19 +98,39 @@ function instrument(src, file, watch) {
       if (c.type === 'MemberExpression' && !c.computed && MUT_METHODS.has(c.property.name)) wrap(n, c.object, `.${c.property.name}()`, anc);
     },
   });
+  // Reads: every expression reference to a watched binding, wrapped as __rw.r(name, loc, x), which returns x.
+  // acorn-walk visits declarations, params and assignment targets as patterns, never as `Identifier`, and skips
+  // non-computed keys, so only real references arrive here. Write-target roots were wrapped above. The edits
+  // use prependRight/appendLeft (writes use prependLeft/appendRight), so a read always nests inside a write.
+  if (withReads) walk.ancestor(ast, {
+    Identifier(n, _, anc) {
+      if (!targets.has(n.name) || writeRoots.has(n) || shadowed(n.name, anc)) return;
+      const parent = anc[anc.length - 2];
+      if (parent && parent.type === 'UnaryExpression' && parent.operator === 'delete') return; // `delete x` isn't a read
+      const call = `__rw.r(${JSON.stringify(n.name)},${JSON.stringify(`${rel}:${n.loc.start.line}:${n.loc.start.column + 1}`)},`;
+      if (parent && parent.type === 'Property' && parent.shorthand && parent.value === n) {
+        ms.prependRight(n.start, `${n.name}: ${call}`); ms.appendLeft(n.end, ')');      // {x} -> {x: __rw.r(..., x)}
+      } else if (parent && parent.type === 'NewExpression' && parent.callee === n) {
+        ms.prependRight(n.start, `(${call}`); ms.appendLeft(n.end, '))');               // new x() keeps its arguments
+      } else {
+        ms.prependRight(n.start, call); ms.appendLeft(n.end, ')');
+      }
+      reads++;
+    },
+  });
   // Getters for the error-time snapshot, on a new last line so no existing line or column moves. They run when the
   // module body finishes; an error thrown while it is still running finds this file not yet registered.
   ms.append(`\n;__rw.reg(${JSON.stringify(rel)},{${[...targets].map(t => `${JSON.stringify(t)}:()=>${t}`).join(',')}});`);
-  return { code: ms.toString(), writes, names: [...targets] };
+  return { code: ms.toString(), writes, reads, names: [...targets] };
 }
 
-function installHook(watch, report) {
+function installHook(watch, report, opts) {
   const orig = Module.prototype._compile;
   Module.prototype._compile = function (content, filename) {
     if (!filename.includes(`${path.sep}node_modules${path.sep}`) && !filename.startsWith(__dirname)) {
       try {
-        const r = instrument(content, filename, watch);
-        if (r.writes) report({ name: 'instrumented', data: { file: path.relative(process.cwd(), filename).split(path.sep).join('/'), writes: r.writes, watch: r.names } });
+        const r = instrument(content, filename, watch, opts);
+        if (r.writes || r.reads) report({ name: 'instrumented', data: { file: path.relative(process.cwd(), filename).split(path.sep).join('/'), writes: r.writes, reads: r.reads, watch: r.names } });
         content = r.code;
       } catch (e) {
         report({ name: 'instrument_failed', data: { file: filename, error: e.message } }); // run uninstrumented rather than crash

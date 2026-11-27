@@ -33,6 +33,7 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 | re-entrancy | one `inHook` guard wraps every recorder entry point |
 | child processes | after opening `REWIND_OUT` the recorder deletes it from `process.env`; `fork()`/`cluster` children inherit `--require recorder.js` but stay inert, so they can't truncate the parent's file |
 | durability | flush every 256 events, immediately on error events, on `exit`, and on SIGINT/SIGTERM (re-raised only if the app has no handler of its own) |
+| watched reads | a second AST pass wraps each expression reference to a watched binding as `__rw.r(name, loc, x)` (returns `x`; same line). A `read` event is recorded once per location per callback run (dedupe set cleared on `async.before`), capped per name by `REWIND_READ_CAP`; `REWIND_READS=0` disables |
 | error-time values | with `--watch`, each instrumented file ends with an appended `__rw.reg(file, {name: () => name})` line; on an uncaught error the monitor reads them (never throwing) into a `snapshot` event carrying the error's seq |
 | `--watch` | `instrument.js` (acorn + magic-string, loaded lazily) wraps writes as `__rw.w(name, path, op, loc, before, (expr), reread)`. It preserves the expression's value and its line, reads `before` only when re-evaluating is side-effect free, and skips shadowed names. |
 
@@ -42,7 +43,7 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 |---|---|
 | `seq` | total order within the run |
 | `t` | µs since recorder start |
-| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `async.cancel` `log` `http.in` `http.out` `http.abort` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` `source` `snapshot` |
+| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `async.cancel` `log` `http.in` `http.out` `http.abort` `error.uncaught` `error.logged` `mutation` `mutation.capped` `read` `read.capped` `instrument` `source` `snapshot` |
 | `eid` | executionAsyncId at emission |
 | `aid`, `tid` | resource id and trigger id (async events; `http.in` anchors) |
 | `type`, `name` | resource type and callback name; log text, request line, error message, variable name |
@@ -78,6 +79,7 @@ need it are left out rather than computed from the wrong code. Runs ingested bef
   - throw site and running callback, with its creation site (observed)
   - the collapsed causal chain to the owning request, and other requests' observable activity while it was in flight (derived)
   - for each watched variable: whether the failing source line reads it (derived), the last write (observed) and who made it (derived), and the own-write → foreign-overwrite → target ordering (derived)
+  - with recorded reads: the read behind the target (observed), the last recorded write before it and whose it was (derived), "read request #N's value" (derived) or "can't explain that read" / "no read recorded" (derived, and no inference follows)
   - a race explanation (inferred, citing those seqs)
   - for an uncaught error with `--watch`: each watched value when it was thrown (observed, from the `snapshot` event whose `data.error` is that error's seq), and whether it differs from the last whole-variable write, which would mean an unrecorded write (derived)
 

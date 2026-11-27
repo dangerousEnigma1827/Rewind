@@ -25,7 +25,7 @@ Suite: **74 passed** on Windows 11, Python 3.15.2, Node 24.22.1 (56 on `main` be
 A causal debugger for Node.js:
 - **Recording.** `rewind record` runs a program with a recorder preloaded. The recorder captures async causality, HTTP requests, logs, errors and, with `--watch`, writes to chosen module-level variables.
 - **Questions.** `timeline` shows what happened in order. `tree` shows who scheduled whom. `diff` finds where two runs part ways. `why` traces an error, or any event, back to the request it belongs to and the callbacks that led there.
-- **What `why` can and can't claim.** With `--watch`, it reports the writes to the watched variable: each write is observed, and the request that made it and the order of writes are derived. Reads are not recorded, so a conclusion such as "this overwrite caused the failure" is always marked as inferred, citing those writes. Without `--watch`, it only suspects shared state.
+- **What `why` can and can't claim.** With `--watch`, it reports the writes to the watched variable: each write is observed, and the request that made it and the order of writes are derived. Since F11, reads of watched variables are recorded too, so "request #2 read request #3's value" is derived from an observed read. A conclusion such as "this overwrite caused the failure" is still always marked as inferred, citing those events. Without `--watch`, it only suspects shared state.
 - **Evidence levels.** Every finding is labelled observed ●, derived ◆ or inferred ?, and `--evidence` shows the event seqs behind it.
 - **Demo.** The Phantom Discount demo shows a shared-state race between concurrent orders, plus a fix patch.
 

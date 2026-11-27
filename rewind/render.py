@@ -38,7 +38,7 @@ THEME = Theme({
     "err": f"bold {P['err']}", "err.t": P["err"], "ok": P["ok"], "write": P["write"],
     "r1": P["r1"], "r2": P["r2"], "r3": P["r3"], "r4": P["r4"],
     "kind.log": "none", "kind.http": "none", "kind.error": f"bold {P['err']}", "kind.mutation": P["write"],
-    "kind.async": P["mute"], "kind.run": P["uv"],
+    "kind.async": P["mute"], "kind.run": P["uv"], "kind.read": P["r1"],
 })
 # Classic Windows consoles (conhost) can't fall back to another font, so a glyph missing from the console font
 # prints as a box. Lucida Console (PowerShell 5.1's default) lacks ● ◆ ✖ ✎ ▸ ◉ ⚙ ◂ ┈ ┃ ◌; these one-cell
@@ -354,7 +354,7 @@ def runs_table(rows, home: str):
 REQ_TONES = ["r1", "r2", "r3", "r4"]
 GLYPH = {"run.start": "◉", "run.end": "◉", "run.signal": "◉", "http.in": "→", "http.out": "←", "log": "»",
          "error.uncaught": "✖", "error.logged": "✖", "mutation": "✎", "mutation.capped": "✎", "async.before": "▸",
-         "instrument": "⚙"}
+         "instrument": "⚙", "read": "◌", "read.capped": "◌"}
 LEVEL = {A.OBSERVED: "[obs]●[/]", A.DERIVED: "[uv]◆[/]", A.INFERRED: "[hyp]?[/]"}
 LEVEL_TEXT = {A.OBSERVED: "obs", A.DERIVED: "none", A.INFERRED: "hyp"}
 
@@ -370,7 +370,7 @@ def clip(v, n: int = 48) -> str:
 
 def kind_style(kind: str) -> str:
     return {"http": "kind.http", "log": "kind.log", "error": "kind.error", "mutation": "kind.mutation",
-            "async": "kind.async", "run": "kind.run"}.get(kind.split(".")[0], "none")
+            "async": "kind.async", "run": "kind.run", "read": "kind.read"}.get(kind.split(".")[0], "none")
 
 
 def event_text(run, e) -> str:
@@ -389,6 +389,10 @@ def event_text(run, e) -> str:
     if e.kind == "mutation":
         return (f"[fn]{escape(e.name + d.get('path', ''))}[/] {escape(d.get('op', ''))} "
                 f"[mute]{escape(clip(d.get('before')))} →[/] {escape(clip(d.get('after')))}  [loc]{escape(d.get('loc', ''))}[/]")
+    if e.kind == "read":
+        return f"[fn]{escape(e.name or '')}[/] [kind.read]read[/] [mute]=[/] {escape(clip(d.get('value')))}  [loc]{escape(d.get('loc', ''))}[/]"
+    if e.kind == "read.capped":
+        return f"[kind.read]{escape(e.name or '')}: more than {d.get('cap')} reads, further reads counted only[/]"
     if e.kind == "mutation.capped":
         return f"[write]{escape(e.name)}: more than {d.get('cap')} writes, further writes counted only[/]"
     if e.kind == "http.out":

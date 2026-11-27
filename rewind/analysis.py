@@ -15,7 +15,8 @@ from .store import Event, resolve_file
 
 OBSERVED, DERIVED, INFERRED = "observed", "derived", "inferred"
 STORY_KINDS = ("run.start", "run.end", "run.signal", "http.in", "http.out", "http.abort", "log",
-               "error.uncaught", "error.logged", "mutation", "mutation.capped", "instrument", "snapshot")
+               "error.uncaught", "error.logged", "mutation", "mutation.capped", "instrument", "snapshot",
+               "read", "read.capped")
 ERROR_KINDS = ("error.uncaught", "error.logged")
 
 
@@ -155,7 +156,7 @@ class Run:
         """aids whose own callback or descendants emitted a story event (DERIVED)."""
         out: set[int] = set()
         for e in self.story:
-            if e.kind in ("run.start", "instrument"):
+            if e.kind in ("run.start", "instrument", "read", "read.capped"):  # reading isn't an effect
                 continue
             for i in self.chain(e.eid):
                 if i.aid in out:
@@ -171,6 +172,12 @@ class Run:
     def watch(self) -> list[str]:
         start = next((e for e in self.events if e.kind == "run.start"), None)
         return (start.data or {}).get("watch") or [] if start else []
+
+    @cached_property
+    def reads_recorded(self) -> bool:
+        """Reads of watched names were instrumented (--watch, without REWIND_READS=0; recorders before F11: no)."""
+        start = next((e for e in self.events if e.kind == "run.start"), None)
+        return bool(start and (start.data or {}).get("reads"))
 
     @cached_property
     def cwd(self) -> str | None:
@@ -297,7 +304,7 @@ def investigate(run: Run, target: Event) -> Investigation:
                     and run.request_of(e.eid) == other.id]
             if acts:
                 overlapping.append(other)
-                kinds = ", ".join(sorted({{"http.in": "arrived", "http.out": "responded", "log": "logged", "mutation": "wrote state"}.get(a.kind, a.kind) for a in acts}))
+                kinds = ", ".join(sorted({{"http.in": "arrived", "http.out": "responded", "log": "logged", "mutation": "wrote state", "read": "read state"}.get(a.kind, a.kind) for a in acts}))
                 F.append(Finding(DERIVED, f"request {other.label} was active while {req.label} was in flight ({kinds})",
                                  [a.seq for a in acts]))
 
@@ -324,6 +331,16 @@ def _watched_findings(run: Run, target: Event, req: Request | None, name: str, f
     writes = [e for e in run.events if e.kind == "mutation" and e.name == name and e.seq < target.seq]
     if failing_line:
         F.append(Finding(DERIVED, f"the failing line reads watched variable `{name}`:  {failing_line.strip()}", [target.seq]))
+    rd = _relevant_read(run, target, req, name) if run.reads_recorded else None
+    if rd is not None:
+        d_ = rd.data or {}
+        reader = f"request {req.label}" if req and run.request_of(rd.eid) == req.id else run.describe(rd.eid)
+        F.append(Finding(OBSERVED, f"{reader} read `{name}` at {d_.get('loc')} (seq {rd.seq}), value {d_.get('value')}", [rd.seq]))
+        prior = next((w for w in reversed(writes) if w.seq < rd.seq), None)
+        if prior is not None and (prior.data or {}).get("path") == "" and prior.data.get("after") != d_.get("value"):
+            F.append(Finding(DERIVED, f"that value differs from the last recorded write before it (seq {prior.seq}: "
+                                      f"{prior.data.get('after')}), so `{name}` was changed in between by "
+                                      f"{_unseen_write(run, name, rd.seq)}", [prior.seq, rd.seq]))
     if not writes:
         if failing_line:
             F.append(Finding(OBSERVED, f"no writes to `{name}` were recorded before this point", []))
@@ -350,6 +367,29 @@ def _watched_findings(run: Run, target: Event, req: Request | None, name: str, f
                          [own[-1].seq, *[w.seq for w in foreign], target.seq]))
     else:
         F.append(Finding(DERIVED, f"request {who} wrote `{name}` while {req.label} was in flight", [w.seq for w in foreign]))
+    if run.reads_recorded:  # F11: the read itself is evidence, so the race no longer rests on source text alone
+        rd = _relevant_read(run, target, req, name)
+        if rd is None:
+            F.append(Finding(DERIVED, f"no read of `{name}` by {req.label} was recorded before this point, so these "
+                                      f"overwrites aren't shown to have reached it (reads through an alias made earlier, "
+                                      f"or in code --watch doesn't instrument, aren't seen)", [target.seq]))
+            return F
+        lastw = next((w for w in reversed(writes) if w.seq < rd.seq), None)
+        lw_rid = run.request_of(lastw.eid) if lastw else None
+        if lastw is None or lw_rid in (None, req.id):
+            F.append(Finding(DERIVED, f"{req.label} read `{name}` (seq {rd.seq}) before request {who}'s overwrite reached "
+                                      f"it: the last recorded write before that read was "
+                                      f"{'its own' if lastw is not None else 'none'}, so the overwrite can't explain that read",
+                             [rd.seq, *([lastw.seq] if lastw else []), foreign[0].seq]))
+            return F
+        F.append(Finding(DERIVED, f"{req.label} read `{name}` (seq {rd.seq}) after request #{lw_rid}'s write (seq {lastw.seq}), "
+                                  f"with no write of its own in between: by the recorded writes, it read request "
+                                  f"#{lw_rid}'s value", [*[w.seq for w in own[-1:]], lastw.seq, rd.seq]))
+        at_failure = target.kind in ERROR_KINDS and (failing_line or rd.eid == target.eid)
+        F.append(Finding(INFERRED, RACE_INFERENCE if at_failure else
+                         f"likely a race between concurrent requests: {req.label} computed with request #{lw_rid}'s "
+                         f"data instead of its own", [*[w.seq for w in own[-1:]], lastw.seq, rd.seq, target.seq]))
+        return F
     if failing_line:
         F.append(Finding(INFERRED, RACE_INFERENCE, [*[w.seq for w in own[-1:]], last.seq, target.seq]))
     else:
@@ -357,6 +397,28 @@ def _watched_findings(run: Run, target: Event, req: Request | None, name: str, f
                                    f"a likely race between concurrent requests. (Reads are not recorded, so this is not proven.)",
                          [*[w.seq for w in own[-1:]], foreign[-1].seq, target.seq]))
     return F
+
+
+def _relevant_read(run: Run, target: Event, req: Request | None, name: str) -> Event | None:
+    """The recorded read of `name` behind `target`: at the failing line in the same callback for an error, else the
+    latest read in the same callback, else the latest read anywhere in the target's request."""
+    reads = [e for e in run.events if e.kind == "read" and e.name == name and e.seq < target.seq]
+    same = [e for e in reads if e.eid == target.eid]
+    frame = user_frame(target.stack) if target.kind in ERROR_KINDS else None
+    if frame:
+        at = [e for e in same if str((e.data or {}).get("loc", "")).rsplit(":", 1)[0] == where(frame)]
+        if at:
+            return at[-1]
+    if same:
+        return same[-1]
+    mine = [e for e in reads if req and run.request_of(e.eid) == req.id]
+    return mine[-1] if mine else None
+
+
+def _unseen_write(run: Run, name: str, upto: int) -> str:
+    capped = any(e.kind == "mutation.capped" and e.name == name and e.seq < upto for e in run.events)
+    return ("one of the writes past the recording cap, or a write --watch doesn't see" if capped else
+            "a write --watch doesn't see (through an alias, inside a called function, or in node_modules)")
 
 
 def snapshot_of(run: Run, error: Event) -> Event | None:
@@ -380,11 +442,9 @@ def _snapshot_findings(run: Run, target: Event) -> list[Finding]:
                   and str((e.data or {}).get("loc", "")).rsplit(":", 2)[0] == file]
         last = writes[-1] if writes else None
         if last is not None and (last.data or {}).get("path") == "" and last.data.get("after") != value:
-            capped = any(e.kind == "mutation.capped" and e.name == name and e.seq < target.seq for e in run.events)
-            how = ("one of the writes past the recording cap, or a write --watch doesn't see" if capped else
-                   "a write --watch doesn't see (through an alias, inside a called function, or in node_modules)")
             F.append(Finding(DERIVED, f"{label} differs from the value recorded at its last write (seq {last.seq}: "
-                                      f"{last.data.get('after')}), so it was changed after that by {how}",
+                                      f"{last.data.get('after')}), so it was changed after that by "
+                                      f"{_unseen_write(run, name, target.seq)}",
                              [last.seq, snap.seq]))
     return F
 

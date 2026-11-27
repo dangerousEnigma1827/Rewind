@@ -33,7 +33,14 @@ For an error it reports, with evidence levels:
 - ◆ whether the failing source line references a watched variable; ● the last recorded write preceding the failure; ◆ which request made that write; ◆ the observed own-write → foreign-overwrite sequence, with the subsequent read inferred from source context.
 - ? likely root cause (e.g. race on shared module-level state), citing the seqs above
 
-For a non-error event (`--seq`, e.g. a log showing a wrong total) it gives the same story but marks a race as **not proven**, because reads aren't recorded.
+**With recorded reads (F11, the default with `--watch`):**
+- ● the read of the watched variable behind the target: at the failing line in the same callback for an error, else the latest read in that callback, else the latest read by the request. It carries location and value.
+- ◆ if that value differs from the last whole-variable write, an unrecorded write changed it in between.
+- ◆ "read request #N's value" when the last recorded write before the read was another request's, with no own write in between. Then ? the race.
+- ◆ if the read came before the foreign overwrite, "can't explain that read", with no inference.
+- ◆ if the request never read the variable, "no read … was recorded", with no inference.
+
+Without recorded reads (`REWIND_READS=0`, or runs recorded before F11), a non-error event (`--seq`, e.g. a log showing a wrong total) gets the old story, with the race marked **not proven**.
 Without `--watch` it never claims a mutation: it only suspects module-level state on the failing line and recommends re-recording with `--watch <var>`.
 
 Source text comes from the run's snapshot, taken at ingest and checked against SHA-256 hashes the recorder took as Node loaded each CommonJS file. Editing code after recording doesn't change an old run's analysis. A file edited while the program ran is stored as `changed` with no text, and findings that need its source are omitted rather than computed from the edited file. ESM files have no load-time hash and are snapshotted unverified at ingest. Runs ingested before snapshots existed still read the file on disk. Details in [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
@@ -59,9 +66,18 @@ Not captured:
 - files under `node_modules`; ESM files (`.mjs`, `"type": "module"`) — test confirms ESM is left unharmed
 - mutations inside functions the value is passed to
 - same-named local variables (skipped on purpose)
-- reads (never recorded)
 
 More than `REWIND_MUT_CAP` (default 10 000) writes to one name → counting continues, values stop.
+
+**Watched reads (F11).** A second instrumentation pass wraps every expression reference to a watched binding as `__rw.r(name, loc, x)`, which returns `x`:
+- **What counts as a read:** shorthand `{x}` becomes `{x: __rw.r(…)}`; `new x()` is parenthesised. acorn-walk visits declarations, params and assignment targets as patterns, so they are never reads. The roots of wrapped write targets and `delete x` are skipped too.
+- **Line and column positions:** the edits insert text on the same line, so line numbers are unchanged. A read nests inside a write that shares a position, because the two use opposite MagicString sides.
+- **Events:** each read is recorded as a `read` event `{name, loc, value}` with the reading callback's `eid`. It is recorded once per location per callback run (the dedupe set is cleared on every `async.before`).
+- **Caps and switches:** `REWIND_READ_CAP` (default 10 000 per name), then a `read.capped` event with counting continuing in `run.end.data.reads`. `REWIND_READS=0` turns reads off, which `run.start.data.reads` records.
+- **A TDZ read** throws exactly as before, and nothing is recorded.
+- **Analysis and diff:** reads are story events but never "effects", so `diff` is unchanged by them.
+- **Measured:** about 15 ns per repeated read (a 1M-iteration loop went from ~7 ms to ~22 ms). 20k separate callbacks each reading once showed no measurable time difference, but produced 10k read events (the cap). The demo gains 3 events.
+- **Not seen:** reads through an alias made earlier, reads in `node_modules`/ESM, and reads inside functions the value was passed to.
 
 **Error-time snapshots.** With `--watch`, each instrumented file gets one appended line, after its last line so no existing line or column moves, that registers a getter per watched top-level name (`__rw.reg`). In `uncaughtExceptionMonitor`, right after the `error.uncaught` event, the recorder reads every getter and emits a `snapshot` event: `data.error` is that error's seq, and `values` is `[{name, file, value}]`. Reads never throw: TDZ and throwing getters become `[threw X]`, and values JSON can't serialise become `[unserialisable Type]` (mutation previews use the same rule now; they used to print `[object Type]`). The read sits inside its own `try`, so it can never change the crash. `why` on an uncaught error reports ● each value and, when it differs from the `after` of the variable's last whole-variable write (path `""`) in the same file, ◆ that a write `--watch` doesn't see changed it (or one past the cap). Not covered: `error.logged` (only uncaught errors are snapshotted), ESM files, and errors thrown while a file's module body is still running (that file isn't registered yet). Serialising a value runs its `toJSON`/getters at crash time.
 Requires `npm install --prefix recorder` (acorn, acorn-walk, magic-string); without `--watch` the recorder needs no npm packages. If they are missing, a `--watch` run crashes at preload with Node's `Cannot find module 'acorn'` (verified M7).
