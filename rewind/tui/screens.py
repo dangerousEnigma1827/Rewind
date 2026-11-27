@@ -29,18 +29,42 @@ def sample_available(cwd: Path) -> bool:
 
 
 class HelpScreen(ModalScreen):
+    """Keyboard shortcuts: a centered card whose body scrolls on short terminals; two columns when there's room."""
     BINDINGS = [Binding("escape,question_mark,q", "dismiss", "close")]
+    CHROME = 2 + 3 + 3  # card border, head (with its margins), foot (with its margins)
 
     def compose(self) -> ComposeResult:
-        card = VerticalScroll(Static(V.help_view()), id="help-card")
-        card.border_title = "◂◂ rewind · keys"
-        yield card
+        with Vertical(id="help-card"):
+            yield Static(id="help-head")
+            with VerticalScroll(id="help-body"):
+                yield Static(id="help-content")
+            yield Static(id="help-foot")
+
+    def on_mount(self):
+        self._layout(self.app.size.width, self.app.size.height)
+
+    def on_resize(self, event):
+        self._layout(event.size.width, event.size.height)
+
+    def _layout(self, width: int, height: int):
+        card_w = min(100, int(width * 0.96))
+        inner = max(20, card_w - 2 - 4)  # border, padding
+        content = V.help_content(two_columns=inner >= 84)
+        console = self.app.console
+        lines = len(console.render_lines(content, console.options.update_width(inner), pad=False))
+        room = max(3, height - 2 - self.CHROME)
+        body = self.query_one("#help-body")
+        body.styles.height = min(lines, room)
+        self.query_one("#help-card").styles.width = card_w
+        self.query_one("#help-content", Static).update(content)
+        self.query_one("#help-head", Static).update(V.help_head())
+        self.query_one("#help-foot", Static).update(V.help_foot(scrolls=lines > room))
 
 
 # ---- home --------------------------------------------------------------------------------------
 class HomeScreen(Screen):
     """Start here: what Rewind is, the one thing to do first (record), the sample, and recent recordings."""
-    BINDINGS = [Binding("n", "record", "record a program"), Binding("s", "sample", "try the sample"),
+    BINDINGS = [Binding("n", "record", "record a program"), Binding("s", "sample", "try the sample", show=False),
                 Binding("r", "reload", "reload", show=False),
                 Binding("j", "cursor(1)", show=False), Binding("k", "cursor(-1)", show=False)]
 
@@ -52,22 +76,24 @@ class HomeScreen(Screen):
                 yield Static(V.T("[text2]Record your Node.js program once, then find out why it did what it did: which "
                                  "request an error belonged to, what ran before it, and who changed the data it used.[/]"),
                              id="tagline")
-                with Vertical(classes="card", id="start-card"):
-                    with Horizontal(classes="action"):
+                with Vertical(classes="card", id="record-card"):
+                    yield Static(V.T("[text2]Start your app the way you normally do, e.g.[/] [text]node server.js[/][text2]. "
+                                     "Rewind runs it with its recorder attached, and you investigate the recording here.[/]"),
+                                 classes="desc")
+                    with Horizontal(id="record-row"):
                         yield Button("Record a program", id="act-record", variant="primary")
-                        yield Static(V.T("Start your app the way you normally do, e.g. [text]node server.js[/]. "
-                                         "Rewind runs it and records what happens. [key]n[/]"), classes="desc")
-                    with Horizontal(classes="action", id="sample-row"):
-                        yield Button("Try the sample", id="act-sample")
-                        yield Static(V.T("Phantom Discount: a small checkout service where two orders overwrite each "
-                                         "other's cart. A good first investigation. [key]s[/]"), classes="desc")
+                        yield Static(V.T("[dim]or press[/] [cap] n [/]"), classes="hint")
                 with Vertical(classes="card", id="recent-card"):
                     yield Static(id="recent-intro")
                     yield OptionList(id="recent")
+                with Horizontal(id="sample-row"):
+                    yield Static(V.T("[text3]New to Rewind?[/]"))
+                    yield Button("Try the sample recording", id="act-sample", classes="-link")
+                    yield Static(V.T("[cap] s [/]"))
         yield Footer()
 
     def on_mount(self):
-        self.query_one("#start-card").border_title = "Start"
+        self.query_one("#record-card").border_title = "Record a program"
         self.query_one("#recent-card").border_title = "Your recordings"
         self.query_one("#sample-row").display = sample_available(Path.cwd())
         self.refresh_runs()
@@ -92,9 +118,8 @@ class HomeScreen(Screen):
             recent.highlighted = 0
             recent.focus()
         else:
-            intro.update(V.T("[text2]No recordings yet.[/] [text3]Recordings are kept in[/] [loc]"
-                             f"{app.session.home}[/][text3], next to where you start Rewind. Record your first "
-                             "program above.[/]"))
+            intro.update(V.T("[text2]No recordings yet.[/] [text3]They'll appear here, kept in[/] [loc]"
+                             f"{app.session.home}[/][text3] (next to where you start Rewind).[/]"))
             recent.display = False
             self.query_one("#act-record", Button).focus()
 

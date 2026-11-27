@@ -16,6 +16,7 @@ from rich.text import Text
 
 from .. import analysis as A
 from .. import render as R
+from . import theme as TH
 from .theme import STYLES
 
 # ---- vocabulary ---------------------------------------------------------------------------------
@@ -332,43 +333,72 @@ def diff_view(res, a_title: str, b_title: str, context: int = 3) -> Group:
 
 
 # ---- help ---------------------------------------------------------------------------------------
-HELP = [
-    ("Get started", [("n", "record a program"), ("h", "home: recordings and the sample"), ("enter", "open the selected item"),
-                     ("q", "quit")]),
-    ("Move around", [("tab  shift+tab", "next / previous panel"), ("1 2 3 4", "recordings · requests · main view · details"),
-                     ("↑ ↓  j k", "move in a list"), ("g  G", "first / last row"), ("i", "show or hide details"),
-                     ("\\", "show or hide the sidebar")]),
-    ("Views of a run", [("o", "Overview: what happened, where to look"), ("w", "Explain the selected event (or the first error)"),
-                        ("t", "Timeline: every event in order"), ("p", "Unfinished: what never completed"),
-                        ("s", "Variables: watched values at the selected event"), ("e", "Async tree: who scheduled what"),
-                        ("d", "Compare with another recording")]),
-    ("Evidence", [("enter", "show a finding's evidence in the timeline"), ("]  [", "next / previous evidence event")]),
-    ("Timeline", [("/", "search"), ("f", "filter by kind"), ("c", "include callback starts"), ("a", "every recorded event"),
-                  ("esc", "clear search and filters")]),
-    ("Recordings", [("b", "mark as the run to compare against"), ("r", "reload recordings from disk")]),
-]
+# (keys, what it does). Descriptions stay short enough to fit one line in the two-column layout.
+HELP = {
+    "Getting started": [(["n"], "record a program"), (["h"], "home: your recordings"), (["enter"], "open the selected item"),
+                        (["?"], "this help")],
+    "Recording": [(["enter"], "start, from the form"), (["ctrl+s"], "start recording"), (["esc"], "stop, or go back"),
+                  (["enter"], "open the finished run")],
+    "Navigation": [(["tab"], "next panel"), (["shift+tab"], "previous panel"), (["1–4"], "jump to a panel"),
+                   (["↑", "↓"], "move in a list"), (["j", "k"], "move in a list"), (["g", "G"], "first / last row"),
+                   (["<", ">"], "previous / next view")],
+    "Investigation": [(["o"], "Overview: start here"), (["w"], "Explain the selected event"), (["t"], "Timeline: every event"),
+                      (["p"], "Unfinished: never completed"), (["s"], "Variables at the selected event"),
+                      (["e"], "Tree: who scheduled what"), (["d"], "Compare with another recording")],
+    "Evidence": [(["enter"], "show a finding's evidence"), (["]"], "next evidence event"), (["["], "previous evidence event"),
+                 (["b"], "use as the comparison run")],
+    "General": [(["/"], "search the timeline"), (["f"], "filter the timeline by kind"), (["c"], "show callback starts"),
+                (["a"], "show every recorded event"), (["esc"], "clear search and filters"), (["i"], "show or hide details"),
+                (["\\"], "show or hide the sidebar"), (["r"], "reload recordings"), (["q"], "quit")],
+}
+HELP_COLUMNS = (["Getting started", "Navigation", "Evidence"], ["Recording", "Investigation", "General"])
 
 
-def _help_column(sections) -> Table:
-    g = grid({"no_wrap": True, "width": 14, "style": STYLES["key"]}, {"ratio": 1, "style": STYLES["text2"]})
-    for n, (section, keys) in enumerate(sections):
+def keycaps(keys: list[str]) -> Text:
+    """Keys drawn as compact keycaps:  n  ,  ctrl+s ."""
+    t = Text()
+    for i, k in enumerate(keys):
+        if i:
+            t.append(" ")
+        t.append(f" {k} ", style=STYLES["cap"])
+    return t
+
+
+def _help_section(names: list[str]) -> Table:
+    g = Table.grid(padding=(0, 2), expand=True)
+    g.add_column(no_wrap=True, width=11, justify="right")
+    g.add_column(ratio=1, overflow="fold")
+    for n, name in enumerate(names):
         if n:
             g.add_row("", "")
-        g.add_row(T(f"[eyebrow]{section.upper()}[/]"), "")
-        for k, what in keys:
-            g.add_row(k, what)
+        g.add_row(Text(""), T(f"[eyebrow]{name.upper()}[/]"))
+        for keys, what in HELP[name]:
+            g.add_row(keycaps(keys), Text(what, style=STYLES["text2"]))
     return g
 
 
-def help_view() -> Group:
-    cols = Table.grid(padding=(0, 4), expand=True)
-    cols.add_column(ratio=1)
-    cols.add_column(ratio=1)
-    by = {name: (name, keys) for name, keys in HELP}
-    cols.add_row(_help_column([by["Get started"], by["Move around"], by["Evidence"]]),
-                 _help_column([by["Views of a run"], by["Timeline"], by["Recordings"]]))
-    legend = grid({"no_wrap": True, "width": 16}, {"ratio": 1})
+def help_content(two_columns: bool = True) -> Group:
+    if two_columns:
+        cols = Table.grid(padding=(0, 4), expand=True)
+        cols.add_column(ratio=1)
+        cols.add_column(ratio=1)
+        cols.add_row(_help_section(HELP_COLUMNS[0]), _help_section(HELP_COLUMNS[1]))
+        body = cols
+    else:
+        body = _help_section([n for col in zip(*HELP_COLUMNS) for n in col])
+    legend = Table.grid(padding=(0, 2), expand=True)
+    legend.add_column(no_wrap=True, width=11, justify="right")
+    legend.add_column(ratio=1)
+    legend.add_row(Text(""), T("[eyebrow]HOW SURE IS A FINDING?[/]"))
     for level, name, what in GROUPS:
-        legend.add_row(T(f"{R.LEVEL[level]} [eyebrow]{name}[/]"), T(f"[text2]{what}[/]"))
-    return Group(cols, Text(), T("[eyebrow]HOW SURE IS A FINDING?[/]"), legend, Text(),
-                 T("[dim]esc or ? to close[/]"))
+        legend.add_row(T(f"{R.LEVEL[level]}"), T(f"[text]{name.capitalize()}[/]  [text3]{what}[/]"))
+    return Group(body, Text(), legend)
+
+
+def help_head() -> Table:
+    return _two_col(T("[uv.b]◂◂[/] [title]Keyboard shortcuts[/]"), Text.assemble(keycaps(["esc"]), (" close", STYLES["text3"])))
+
+
+def help_foot(scrolls: bool) -> Text:
+    hint = "  [dim]·[/]  [text3]↓ scroll for more[/]" if scrolls else ""
+    return T(f"[dim]press[/] [cap] esc [/] [dim]or[/] [cap] ? [/] [dim]to close[/]{hint}")

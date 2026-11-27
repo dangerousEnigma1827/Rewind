@@ -6,6 +6,11 @@ Sources: render.PALETTE (the CLI) and the website's tokens (rewind-cli: src/styl
 - Green, red and amber mean only ok, error and warning/unresolved. They use the website's "ink" variants, which
   reach at least 4.5:1 contrast on every surface here (tests/test_tui.py checks the contrast).
 - Request tones r1-r4 and the evidence marks match the CLI, so a finding reads the same in both.
+
+Component rules (see docs/handover/TUI_VISUAL_POLISH.md for why):
+- Textual paints a border's cells with the widget's own background. So a widget either has the same fill as its
+  border (solid shapes: buttons, drawn with `tall`) or the same fill as its parent (outlined shapes: inputs), never
+  a fill that differs from both, which is what showed as a block around rounded corners.
 """
 from rich.style import Style
 from textual.theme import Theme
@@ -18,7 +23,13 @@ C = {
     "uv": "#7F5AF0", "uv.hi": "#8D6CFF", "uv.lo": "#6A48D8",
     "sel": "#22183F",       # violet at 22% on the background: the focused selection (as on the website)
     "sel.dim": "#150F25",   # the same selection when its panel isn't focused
-    "sel.hi": "#32235C",    # violet at 35%: a focused primary button
+    "sel.hi": "#32235C",    # violet at 35%: a focused or hovered primary button
+    # components, all derived from the tokens above
+    "btn": "#2A1D52",       # primary button fill: violet at ~30%, distinct but not a bright block
+    "btn2": "#17121F",      # secondary button fill: one quiet step above a panel
+    "btn2.hi": "#211A30",   # secondary hover/focus
+    "cap": "#1C1729",       # keycap fill (help, footer)
+    "thumb": "#3A3448",     # scrollbar thumb at rest; violet on hover and drag
     # text
     "text": "#EDEDF0", "text2": "#B4B4BD", "text3": "#8A8A96", "mute": "#81818F", "dim": "#5F5B6C",
     # semantics only (website ink values)
@@ -36,7 +47,7 @@ STYLES = {name: Style.parse(spec) for name, spec in {
     "kind.log": C["text"], "kind.http": C["text2"], "kind.error": f"bold {C['err']}", "kind.mutation": C["warn"],
     "kind.async": C["mute"], "kind.run": C["uv.hi"], "kind.read": C["r1"], "none": "",
     "text": C["text"], "text2": C["text2"], "text3": C["text3"], "eyebrow": f"bold {C['text3']}", "key": f"bold {C['uv.hi']}",
-    "green": C["ok"],
+    "cap": f"bold {C['uv.hi']} on {C['cap']}", "green": C["ok"],
 }.items()}
 
 THEME = Theme(
@@ -44,7 +55,7 @@ THEME = Theme(
     primary=C["uv"], secondary=C["uv.hi"], accent=C["uv.hi"],
     foreground=C["text"], background=C["bg"], surface=C["panel"], panel=C["raised"], boost=C["raised"],
     success=C["ok"], warning=C["warn"], error=C["err"],
-    variables={"border": C["uv"], "border-blurred": C["line"], "scrollbar": C["line.hi"],
+    variables={"border": C["uv"], "border-blurred": C["line"], "scrollbar": C["thumb"],
                "scrollbar-background": C["bg"], "scrollbar-hover": C["uv.lo"], "scrollbar-active": C["uv"],
                "scrollbar-corner-color": C["bg"], "footer-background": C["panel"], "footer-key-foreground": C["uv.hi"],
                "footer-description-foreground": C["text3"], "input-selection-background": C["sel"],
@@ -53,20 +64,29 @@ THEME = Theme(
 )
 
 # every background in the CSS below; tests assert each one is dark
-BACKGROUNDS = [C[k] for k in ("bg", "panel", "raised", "term", "sel", "sel.dim", "sel.hi")]
+BACKGROUNDS = [C[k] for k in ("bg", "panel", "raised", "term", "sel", "sel.dim", "sel.hi", "btn", "btn2", "btn2.hi", "cap")]
 
 CSS = f"""
 Screen {{ background: {C['bg']}; color: {C['text']}; }}
-ModalScreen {{ background: {C['bg']} 85%; }}
-* {{ scrollbar-size-vertical: 1; scrollbar-color: {C['line.hi']}; scrollbar-background: {C['bg']};
-     scrollbar-color-hover: {C['uv.lo']}; scrollbar-color-active: {C['uv']}; }}
+ModalScreen {{ background: {C['bg']} 80%; }}
+
+/* scrollbars: thin (rewind/tui/scrollbar.py draws a half-cell thumb), dark track, violet only when used */
+* {{ scrollbar-size-vertical: 1; scrollbar-size-horizontal: 1;
+     scrollbar-color: {C['thumb']}; scrollbar-color-hover: {C['uv.lo']}; scrollbar-color-active: {C['uv']};
+     scrollbar-background: {C['bg']}; scrollbar-background-hover: {C['bg']}; scrollbar-background-active: {C['bg']};
+     scrollbar-corner-color: {C['bg']}; }}
+.card, .card * {{ scrollbar-background: {C['panel']}; scrollbar-background-hover: {C['panel']};
+                  scrollbar-background-active: {C['panel']}; }}
+#help-card, #help-card * {{ scrollbar-background: {C['panel']}; scrollbar-background-hover: {C['panel']};
+                            scrollbar-background-active: {C['panel']}; }}
 
 /* chrome */
 .topbar {{ height: 1; background: {C['panel']}; color: {C['text2']}; padding: 0 1; }}
 Footer {{ background: {C['panel']}; }}
 Footer > FooterKey {{ background: {C['panel']}; color: {C['text3']}; }}
-Footer > FooterKey .footer-key--key {{ background: {C['panel']}; color: {C['uv.hi']}; text-style: bold; }}
+Footer > FooterKey .footer-key--key {{ background: {C['cap']}; color: {C['uv.hi']}; text-style: bold; }}
 Footer > FooterKey .footer-key--description {{ color: {C['text3']}; }}
+Footer > FooterKey:hover {{ background: {C['sel.dim']}; }}
 
 /* panels: dark, hairline borders, violet when focused */
 .panel {{
@@ -97,51 +117,73 @@ Tree > .tree--guides {{ color: {C['line.hi']}; }}
 Tree > .tree--guides-selected {{ color: {C['uv']}; }}
 Tree > .tree--guides-hover {{ color: {C['uv.lo']}; }}
 
-/* tabs: quiet until active; the active one is violet with a violet underline */
+/* tabs: every label is clickable and carries its key; the bar scrolls sideways when labels don't fit
+   (Textual hides the overflow by default), and the active tab is scrolled into view */
 TabbedContent {{ height: 1fr; }}
 TabbedContent ContentSwitcher {{ height: 1fr; }}
 TabPane {{ padding: 0; height: 1fr; }}
-Tabs {{ background: {C['bg']}; height: 2; }}
+Tabs {{ background: {C['bg']}; height: auto; }}
+Tabs > #tabs-scroll {{ height: auto; overflow-x: auto; overflow-y: hidden; scrollbar-size-horizontal: 1; }}
 Tab {{ color: {C['text3']}; padding: 0 1; }}
 Tab.-active {{ color: {C['uv.hi']}; text-style: bold; }}
-Tab:hover {{ color: {C['text']}; }}
+Tab:hover {{ color: {C['text']}; background: {C['sel.dim']}; }}
+Tabs:focus .-active {{ background: {C['sel']}; color: {C['text']}; text-style: bold; }}
 Underline > .underline--bar {{ background: {C['line']}; color: {C['uv']}; }}
 
-/* forms */
-Input {{ background: {C['panel']}; color: {C['text']}; border: round {C['line.hi']}; padding: 0 1; height: 3; }}
-Input:focus {{ border: round {C['uv']}; }}
+/* inputs: outlined, the fill matches the page so nothing spills past the rounded border; no focus tint */
+Input {{ background: {C['bg']}; color: {C['text']}; border: round {C['line.hi']}; padding: 0 1; height: 3;
+         background-tint: {C['text']} 0%; }}
+Input:focus {{ border: round {C['uv']}; background-tint: {C['text']} 0%; }}
+Input:hover {{ border: round {C['dim']}; }}
+Input:focus:hover {{ border: round {C['uv']}; }}
+.card Input {{ background: {C['panel']}; }}
 Input > .input--placeholder {{ color: {C['dim']}; }}
 Input > .input--cursor {{ background: {C['uv.hi']}; color: {C['bg']}; }}
-Button {{ background: {C['panel']}; color: {C['text']}; border: round {C['line.hi']}; height: 3; min-width: 10;
-          text-style: none; padding: 0 2; }}
-Button:hover {{ background: {C['sel.dim']}; border: round {C['uv.lo']}; }}
-Button:focus {{ border: round {C['uv.hi']}; text-style: bold; background: {C['sel']}; }}
-Button.-primary {{ background: {C['sel']}; border: round {C['uv']}; color: {C['text']}; text-style: bold; }}
+Input > .input--selection {{ background: {C['sel.hi']}; }}
+
+/* buttons: solid fills. The rounded border is always there, in the fill's own colour (invisible), so a button's
+   size never changes; focus only recolours it violet. (Half-block `tall` borders left seams at the corners.) */
+Button {{ width: auto; min-width: 12; height: 3; padding: 0 1; content-align: center middle;
+          color: {C['text']}; background: {C['btn2']}; border: round {C['btn2']}; text-style: none; tint: {C['bg']} 0%; }}
+Button:hover {{ background: {C['btn2.hi']}; border: round {C['btn2.hi']}; }}
+Button:focus {{ background: {C['btn2.hi']}; border: round {C['uv.lo']}; text-style: bold; }}
+Button.-active {{ background: {C['sel.hi']}; border: round {C['sel.hi']}; tint: {C['bg']} 0%; }}
+Button.-primary {{ background: {C['btn']}; border: round {C['btn']}; color: {C['text']}; text-style: bold; }}
+Button.-primary:hover {{ background: {C['sel.hi']}; border: round {C['sel.hi']}; }}
 Button.-primary:focus {{ background: {C['sel.hi']}; border: round {C['uv.hi']}; }}
-Button.-error {{ background: {C['raised']}; border: round {C['err']}; color: {C['err']}; }}
+Button:disabled {{ background: {C['raised']}; border: round {C['raised']}; color: {C['text3']}; text-style: none; }}
+Button.-link {{ height: 1; min-width: 0; padding: 0; margin: 0 1; border: none; background: {C['bg']}; color: {C['uv.hi']};
+                text-style: underline; }}
+Button.-link:hover, Button.-link:focus {{ background: {C['sel']}; border: none; text-style: bold underline; }}
 RichLog {{ background: {C['term']}; border: round {C['line']}; padding: 0 1; }}
-Toast {{ background: {C['raised']}; color: {C['text']}; border-left: outer {C['uv']}; }}
+Toast {{ background: {C['raised']}; color: {C['text']}; border-left: outer {C['uv']}; padding: 0 1; }}
+Toast > .toast--title {{ color: {C['uv.hi']}; text-style: bold; }}
 Toast.-error {{ border-left: outer {C['err']}; }}
 Toast.-warning {{ border-left: outer {C['warn']}; }}
 
-/* home */
+/* home: one dominant action, then recordings, then a quiet way to try the sample */
 #home {{ align: center top; padding: 1 2; }}
 #home-col {{ width: 96; max-width: 100%; height: auto; }}
 #wordmark {{ height: auto; margin: 1 0 1 0; }}
-#tagline {{ height: auto; color: {C['text2']}; }}
-.card {{ background: {C['panel']}; border: round {C['line']}; padding: 1 2; height: auto; margin: 1 0 0 0;
+#tagline {{ height: auto; color: {C['text2']}; margin: 0 0 1 0; }}
+.card {{ background: {C['panel']}; border: round {C['line']}; padding: 1 2; height: auto; margin: 0 0 1 0;
          border-title-color: {C['text3']}; border-title-style: bold; }}
 .card:focus-within {{ border: round {C['uv']}; border-title-color: {C['uv.hi']}; }}
-.action {{ height: auto; margin: 0; background: {C['panel']}; }}
-.action Button {{ width: 26; }}
-.action .desc {{ width: 1fr; padding: 0 0 0 2; color: {C['text2']}; height: auto; }}
+.card Button.-link {{ background: {C['panel']}; }}
+#record-card .desc {{ height: auto; color: {C['text2']}; margin: 0 0 1 0; }}
+#record-row {{ height: auto; }}
+#record-row .hint {{ width: auto; height: 3; content-align: left middle; padding: 0 0 0 2; color: {C['dim']}; }}
 #recent {{ height: auto; max-height: 10; background: {C['panel']}; }}
+#recent > .option-list--option-highlighted {{ background: {C['sel.dim']}; }}
+#recent:focus > .option-list--option-highlighted {{ background: {C['sel']}; }}
+#recent-intro {{ height: auto; margin: 0 0 1 0; }}
+#sample-row {{ height: 1; padding: 0 1; }}
+#sample-row Static {{ width: auto; color: {C['text3']}; }}
 HomeScreen.-short #wordmark, HomeScreen.-short #tagline {{ display: none; }}
 HomeScreen.-short #home {{ padding: 0 1; }}
 HomeScreen.-short .card {{ padding: 0 1; }}
+HomeScreen.-short #record-card .desc {{ margin: 0; }}
 HomeScreen.-short #recent {{ max-height: 6; }}
-#recent > .option-list--option-highlighted {{ background: {C['sel.dim']}; }}
-#recent:focus > .option-list--option-highlighted {{ background: {C['sel']}; }}
 
 /* record */
 #record {{ align: center top; padding: 1 2; }}
@@ -169,9 +211,13 @@ HomeScreen.-short #recent {{ max-height: 6; }}
 #why-head, #diff-head {{ height: auto; padding: 0 1 1 1; border-bottom: solid {C['line']}; margin-bottom: 1; }}
 #compare-runs {{ height: auto; max-height: 8; border-bottom: solid {C['line']}; margin-bottom: 1; }}
 
+/* help: a centered card; the body scrolls when the terminal is short (heights set in HelpScreen) */
 HelpScreen {{ align: center middle; }}
-#help-card {{ width: 120; max-width: 96%; height: auto; max-height: 90%; background: {C['panel']};
-              border: round {C['uv']}; border-title-color: {C['uv.hi']}; border-title-style: bold; padding: 1 2; }}
+#help-card {{ width: 100; max-width: 96%; height: auto; background: {C['panel']}; border: round {C['line.hi']};
+              padding: 0 2; }}
+#help-head {{ height: 1; margin: 1 0 1 0; }}
+#help-body {{ height: auto; background: {C['panel']}; }}
+#help-foot {{ height: 1; margin: 1 0 1 0; color: {C['dim']}; }}
 
 /* responsive (classes set on resize): medium narrows the side panes, compact shows details on demand,
    narrow stacks everything */

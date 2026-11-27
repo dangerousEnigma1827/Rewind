@@ -17,6 +17,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.scrollbar import ScrollBar
 from textual.widgets import DataTable, Footer, Input, OptionList, Static, TabbedContent, TabPane, Tree
 from textual.widgets.option_list import Option
 
@@ -24,7 +25,10 @@ from .. import analysis as A
 from .. import store
 from . import views as V
 from .screens import HelpScreen, HomeScreen, RecordScreen
+from .scrollbar import ThinScrollBarRender
 from .theme import CSS, STYLES, THEME
+
+ScrollBar.renderer = ThinScrollBarRender  # every scrollable region in the app gets the thin Ultraviolet scrollbar
 
 KINDS = [("all events", None), ("requests", ("http",)), ("logs", ("log",)), ("errors", ("error",)),
          ("writes", ("mutation",)), ("reads", ("read",)), ("snapshots", ("snapshot",))]
@@ -46,7 +50,7 @@ INTRO = {
     "diff": "Compare this recording (B) with another one (A) to find the first point where their executions differ. "
             "Pick the other recording:",
 }
-INVESTIGATION_ONLY = {"search", "why", "view", "state", "diff", "baseline", "kind_filter", "callbacks", "raw",
+INVESTIGATION_ONLY = {"search", "why", "view", "step_view", "state", "diff", "baseline", "kind_filter", "callbacks", "raw",
                       "evidence", "reload", "details", "toggle", "clear", "focus_panel", "cursor", "edge", "home",
                       "new_recording"}
 
@@ -98,6 +102,8 @@ class RewindApp(App):
         Binding("n", "new_recording", "record"),
         Binding("slash", "search", "search"),
         Binding("q", "quit", "quit"),
+        Binding("greater_than_sign", "step_view(1)", "next view", key_display=">"),
+        Binding("less_than_sign", "step_view(-1)", "previous view", show=False, key_display="<"),
         Binding("o", "view('overview')", "overview", show=False),
         Binding("w", "why", "explain", show=False),
         Binding("t", "view('timeline')", "timeline", show=False),
@@ -149,7 +155,7 @@ class RewindApp(App):
             with Panel(id="main"):
                 with TabbedContent(id="views", initial="overview"):
                     for pane_id, label, key in TABS:
-                        with TabPane(label, id=pane_id):
+                        with TabPane(f"{label} [{V.TH.C['dim']}]{key}[/]", id=pane_id):  # every tab shows its key
                             yield from self._pane(pane_id)
             with VerticalScroll(id="details-panel", classes="panel"):
                 yield Static(id="details")
@@ -806,6 +812,13 @@ class RewindApp(App):
             self._q("#compare-runs", OptionList).focus()
 
     # ---- navigation ---------------------------------------------------------------------------
+    def action_step_view(self, step: int):
+        """< and >: the previous / next view, wrapping around, so the far tabs are one key away from either end."""
+        ids = [p for p, _, _ in TABS]
+        cur = self._q("#views", TabbedContent).active
+        self.action_view(ids[(ids.index(cur) + step) % len(ids)] if cur in ids else ids[0])
+        self.action_focus_panel("main")
+
     def action_view(self, name: str):
         views = self._q("#views", TabbedContent)
         if views.active != name:
