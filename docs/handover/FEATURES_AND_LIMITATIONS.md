@@ -15,7 +15,20 @@ Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. C
 | `rewind tree [RUN]` | `-r/--request N`, `--full` | Async causality tree ("who scheduled whom"). Quiet branches pruned and internal hops folded unless `--full`; reports how much it hid. |
 | `rewind why [RUN]` | `-e/--error N` (default 1), `-s/--seq SEQ`, `--evidence` | Causal investigation of error N, or of any event by seq. |
 | `rewind diff A B` | `--all`, `--evidence` | Aligns two runs and finds the first divergence. `--all` includes callbacks outside any request (harness/plumbing). |
+| `rewind at RUN SEQ` | `--evidence` | Watched variables' state at event SEQ, from recorded writes, reads and snapshots only (see below). Not on the landing screen (80×24 limit). |
 | `rewind pending [RUN]` | `--evidence` | What never finished: requests without a response and the unfinished operations they waited on. Not on the landing screen, which is at its 80×24 limit. |
+
+## State at a point (`at`, F14)
+
+`rewind at RUN SEQ [--evidence]` reconstructs each watched variable at event SEQ from recorded evidence only. Variables are keyed by name and file.
+
+- **Value:** the latest whole-value evidence at or before SEQ: a whole-variable write (path `""`), a read, or an error snapshot. ● where it came from (seq, request or callback, location).
+- **Which write:** when the value came from a read or snapshot, ◆ the last recorded whole-value write before it.
+- **As of, never "current":** ◆ "latest recorded value, as of seq B … not proven to be the value at seq SEQ".
+- **Partial:** if property writes (e.g. `.items = …`) came after that evidence, the variable is **partial**. ◆ The whole value is unknown past the first of them, and ● each one is listed with its path and new value. Values are never merged.
+- **Unknown:** no write, read or snapshot at or before SEQ (a declaration's initial value isn't recorded), or the write cap was reached with no read since.
+- **Unrecorded change:** ◆ a read or snapshot that differs from the previous recorded value, with no recorded write in between, was changed by a write `--watch` doesn't see.
+- **Also shown:** truncated previews (200 characters) are flagged. The header shows the event at SEQ, its request, the requests in flight, and whether the recording was incomplete. Runs without `--watch` say so.
 
 ## Unfinished work (`pending`)
 

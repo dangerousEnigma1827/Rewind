@@ -195,6 +195,17 @@ def pending(run: Optional[str] = typer.Argument(None, help="Run id prefix, label
 
 
 @app.command(cls=RewindCommand, context_settings=RUN_REF)
+def at(run: str = typer.Argument(..., help="Run id prefix, label, 'last' or -N."),
+       seq: int = typer.Argument(..., help="Event seq to inspect (from timeline, why --evidence, ...)."),
+       evidence: bool = typer.Option(False, "--evidence", help="Show the event seqs backing every finding.")):
+    """Watched variables' state at one point of a run, from the writes, reads and snapshots recorded up to it."""
+    row, r = _load(run)
+    if seq not in r.by_seq:
+        render.fail(f"run has no event with seq {seq} (it has 0–{r.events[-1].seq if r.events else 0})"); raise typer.Exit(2)
+    render.state_at(r, analysis.state_at(r, seq), _title(row), evidence)
+
+
+@app.command(cls=RewindCommand, context_settings=RUN_REF)
 def diff(a: str = typer.Argument(..., help="Baseline run (e.g. good)."),
          b: str = typer.Argument(..., help="Run to compare (e.g. bad)."),
          all_: bool = typer.Option(False, "--all", help="Include callbacks outside any request (harness, plumbing)."),

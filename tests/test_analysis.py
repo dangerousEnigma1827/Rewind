@@ -214,6 +214,102 @@ def test_overwrites_that_reach_no_read_are_not_called_a_race(record, rewind_home
     assert any("no read of `shared`" in t for t in levels(blind, A.DERIVED)) and not levels(blind, A.INFERRED)
 
 
+# ---- state at a point (F14) ----------------------------------------------------------
+STATE_WATCH = {"REWIND_WATCH": "cart,count,untouched"}
+
+
+def log_seq(run, prefix):
+    return next(e.seq for e in run.events if e.kind == "log" and e.name.startswith(prefix))
+
+
+def var(st, name):
+    return next(v for v in st.vars if v.name == name)
+
+
+def assert_state_integrity(run, st):
+    for f in st.findings + [f for v in st.vars for f in v.findings]:
+        assert all(s in run.by_seq and s <= st.target.seq for s in f.evidence), f.text  # nothing from the future
+    for v in st.vars:
+        if v.status == "unknown":
+            assert v.value is None
+        else:
+            assert v.basis is not None and v.basis.seq <= st.target.seq and v.basis.kind in ("mutation", "read", "snapshot")
+
+
+def test_state_at_follows_writes_and_reads(record, rewind_home):
+    run = load(record, rewind_home, "state.js", STATE_WATCH)
+    first = next(e for e in run.events if e.kind == "mutation" and e.name == "cart")
+    st = A.state_at(run, first.seq)
+    assert_state_integrity(run, st)
+    assert (var(st, "cart").status, var(st, "cart").value) == ("known", '{"id":1}')
+    assert var(st, "count").status == "unknown"            # its writes come later: nothing assumed
+    assert var(st, "untouched").status == "unknown" and var(st, "untouched").file is None
+    st = A.state_at(run, log_seq(run, "a done"))           # timer a rewrote it; count written twice
+    assert_state_integrity(run, st)
+    c = var(st, "cart")
+    assert c.value == '{"id":2}' and c.basis.kind == "mutation" and run.request_of(c.basis.eid) is None
+    assert run.inits[c.basis.eid].name == "a"               # written inside timer a's callback
+    assert (var(st, "count").value, var(st, "count").basis.data["op"]) == ("2", "++")
+    st = A.state_at(run, log_seq(run, "b saw"))            # a read re-establishes the whole value
+    c = var(st, "cart")
+    assert c.basis.kind == "read" and c.value == '{"id":2}'
+    assert any("last recorded whole-value write before it" in f.text for f in c.findings)
+
+
+def test_state_at_marks_partial_and_unrecorded_changes(record, rewind_home):
+    run = load(record, rewind_home, "state.js", STATE_WATCH)
+    st = A.state_at(run, log_seq(run, "c done"))           # property write after the last whole value
+    assert_state_integrity(run, st)
+    c = var(st, "cart")
+    assert c.status == "partial" and [p.data["path"] for p in c.later] == [".items"]
+    assert any("whole value is unknown" in f.text for f in c.findings)
+    st = A.state_at(run, log_seq(run, "d done"))           # the alias write in d isn't recorded...
+    c = var(st, "cart")
+    assert c.status == "known" and c.value == '{"id":2,"items":[1]}' and c.basis.kind == "read"
+    assert any("not proven to be the value" in f.text for f in c.findings)  # ...so it is shown as of its read, hedged
+    assert any("alias" in f.text for f in st.findings)
+    st = A.state_at(run, log_seq(run, "e saw"))            # the next read reveals it
+    c = var(st, "cart")
+    assert c.value == '{"id":99,"items":[1]}'
+    assert any(f.level == A.DERIVED and "differs from the previous recorded value" in f.text for f in c.findings)
+    assert var(st, "untouched").status == "unknown"
+
+
+def test_state_at_during_interleaved_requests(demo):
+    run = demo()
+    st = A.state_at(run, run.errors[0].seq)
+    assert_state_integrity(run, st)
+    assert st.request.id == 3 and 3 in {r.id for r in st.in_flight}
+    c = var(st, "currentCart")
+    assert c.basis.kind == "read" and run.request_of(c.basis.eid) == 3 and '"C-303"' in c.value
+    w = next(f for f in c.findings if "last recorded whole-value write" in f.text)
+    assert run.request_of(run.by_seq[w.evidence[0]].eid) == 4 and "request #4" in w.text
+    a101 = next(e for e in run.events if e.kind == "log" and "A-101" in e.name)
+    st = A.state_at(run, a101.seq)
+    assert '"B-202"' in var(st, "currentCart").value and {r.id for r in st.in_flight} >= {2, 3}
+
+
+def test_state_at_after_a_cap_is_unknown(record, rewind_home):
+    run = load(record, rewind_home, "state.js", {"REWIND_WATCH": "count", "REWIND_MUT_CAP": "1"})
+    st = A.state_at(run, log_seq(run, "a done"))
+    c = var(st, "count")
+    assert c.status == "unknown" and c.value is None and any("weren't recorded" in f.text for f in c.findings)
+
+
+def test_state_at_in_an_incomplete_recording_and_without_watch(record, rewind_home):
+    r = record("state.js", {**STATE_WATCH, "STATE_HOLD": "1"}, kill_when=lambda s: "error.logged" in s)
+    db = store.connect()
+    store.ingest(db, "held", r.path)
+    run = A.Run(store.events(db, "held"))
+    st = A.state_at(run, run.events[-1].seq)
+    assert_state_integrity(run, st)
+    assert not st.complete and any("recording incomplete" in f.text for f in st.findings)
+    assert var(st, "cart").value == '{"id":99,"items":[1]}'  # e's read was recorded before the kill
+    plain = load(record, rewind_home, "state.js", rid="nowatch")
+    st = A.state_at(plain, plain.events[-1].seq)
+    assert not st.vars and any("without --watch" in f.text for f in st.findings)
+
+
 # ---- error-time snapshots (F12) ------------------------------------------------------
 def test_why_reports_values_at_the_error_and_unrecorded_changes(record, rewind_home):
     run = load(record, rewind_home, "snapshot.js", {"REWIND_WATCH": "currentCart,count"})

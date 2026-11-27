@@ -538,6 +538,30 @@ def pending(rep, title_: str, evidence: bool):
     findings(rep.findings, evidence)
 
 
+STATUS_TEXT = {"known": "[ok]known[/]", "partial": "[write]partial[/]", "unknown": "[mute]unknown[/]"}
+
+
+def state_at(run, st, title_: str, evidence: bool):
+    """`rewind at`: the point in time, what was in flight, then each watched variable with where its value came from."""
+    e = st.target
+    title("at", title_, f"seq {e.seq} of {run.events[-1].seq}")
+    console.print()
+    where_ = context(run, e)
+    console.print(f"  [{kind_style(e.kind)}]{GLYPH.get(e.kind, '·')}[/] [mute]{e.seq:>5}[/]  {event_text(run, e)}"
+                  + (f"  {where_}" if where_ else "") + (f"  [mute]·[/] {req_tag(st.request.id)}" if st.request else ""))
+    if st.in_flight:
+        console.print("  [mute]in flight:[/] " + "  ".join(f"{req_tag(r.id)} {escape(r.inbound.name)}" for r in st.in_flight))
+    if st.findings:
+        console.print()
+        findings(st.findings, evidence)
+    for v in st.vars:
+        console.print()
+        section(f"[fn]{escape(v.name)}[/]" + (f" [mute]{escape(v.file)}[/]" if v.file else ""), STATUS_TEXT[v.status])
+        if v.value is not None:
+            console.print(Padding(Text(v.value, overflow="fold"), (0, 0, 0, 4)), width=width())
+        findings(v.findings, evidence)
+
+
 def _diff_line(mark: str, style: str, tok: str, seq: int | None):
     seq_s = f"{seq:>5}" if seq is not None else "     "
     console.print(f"  [{style}]{mark}[/] [mute]{seq_s}[/]  [{style if mark != ' ' else 'mute'}]{escape(tok)}[/]", soft_wrap=False,

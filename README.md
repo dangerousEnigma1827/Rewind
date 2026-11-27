@@ -142,7 +142,9 @@ changed the cart, or that $161 is wrong. `rewind why` does:
 
 Two more views complete the story:
 - `rewind why --seq` explains the silent $161 overcharge. ● #2 read `currentCart` at `checkout.js:23` and got
-  B-202's cart. ◆ The last recorded write before that read was request #3's, so #2 read #3's value.- `rewind diff good bad` against a sequential run shows the same code path with a different interleaving.
+  B-202's cart. ◆ The last recorded write before that read was request #3's, so #2 read #3's value.- `rewind at bad <seq>` shows `currentCart` at any point in the run, together with the write or read that last
+  recorded its value.
+- `rewind diff good bad` against a sequential run shows the same code path with a different interleaving.
 
 `demo/fix.patch` keeps the cart per request. With it applied, all three totals are correct and `rewind why`
 reports no errors.
@@ -206,6 +208,8 @@ To record your own program: `rewind record -- node app.js [args]` (or just `rewi
 | `rewind tree [RUN] [-r N] [--full]` | the async causality tree; `-r` roots it at a request |
 | `rewind why [RUN] [-e N] [-s SEQ] [--evidence]` | investigates error N (default: the first), or any event by its seq |
 | `rewind diff A B [--all] [--evidence]` | aligns two runs and finds the first divergence; `--all` includes callbacks outside any request |
+| `rewind pending [RUN] [--evidence]` | requests that never finished and the operations they waited on |
+| `rewind at RUN SEQ [--evidence]` | each watched variable at event SEQ. The value is the latest whole-value write, read or error snapshot at or before it, with its seq and who made it. It is **partial** when later property writes changed it, and **unknown** when nothing was recorded or the write cap was hit. A value is never assumed to have persisted: each one is shown "as of" the event that recorded it |
 
 `RUN` is a label, an id prefix, `last` (the default) or `-N` (the Nth newest). `rewind <command> --help` lists
 every option.

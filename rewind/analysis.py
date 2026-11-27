@@ -592,6 +592,127 @@ def pending(run: Run) -> Pending:
     return Pending(complete, states, ops, F)
 
 
+# ---- state at a point (F14) -----------------------------------------------------------
+@dataclass
+class VarState:
+    name: str
+    file: str | None
+    status: str                     # known | partial | unknown
+    value: str | None               # latest whole value recorded at or before the point (None: unknown)
+    basis: Event | None             # the write, read or snapshot that recorded it
+    later: list[Event]              # property writes after `basis`: the whole value isn't reconstructable past them
+    findings: list[Finding]
+
+
+@dataclass
+class StateAt:
+    target: Event
+    request: Request | None
+    in_flight: list[Request]
+    complete: bool
+    vars: list[VarState]
+    findings: list[Finding]
+
+
+def _file_of(loc) -> str:
+    return str(loc or "").rsplit(":", 2)[0]
+
+
+def state_at(run: Run, seq: int) -> StateAt:
+    """Each watched variable as far as recorded evidence shows at `seq`. Never merges: a value is the latest
+    whole-value evidence (a whole-variable write, a read, an error snapshot), labelled with where it came from."""
+    target = run.by_seq[seq]
+    complete, _ = recording_end(run)
+    F: list[Finding] = []
+    if not complete:
+        F.append(Finding(DERIVED, f"recording incomplete: it ends at seq {run.events[-1].seq}; everything up to seq {seq} "
+                                  f"that was recorded is used, but later events may be lost", []))
+    aborts = {e.data["req"]: e for e in run.events if e.kind == "http.abort"}
+    in_flight = [r for r in run.requests.values() if r.inbound.seq <= seq
+                 and not (r.outbound and r.outbound.seq <= seq) and not (r.id in aborts and aborts[r.id].seq <= seq)]
+
+    whole: dict[tuple, list[tuple[Event, str, str]]] = {}   # key -> [(event, value, how)] in seq order
+    partial: dict[tuple, list[Event]] = {}
+    caps: dict[str, Event] = {}
+    for e in run.events:
+        if e.seq > seq:
+            break
+        d = e.data or {}
+        if e.kind == "mutation":
+            key = (e.name, _file_of(d.get("loc")))
+            if d.get("path") == "":
+                whole.setdefault(key, []).append((e, d.get("after"), "write"))
+            else:
+                partial.setdefault(key, []).append(e)
+        elif e.kind == "read":
+            whole.setdefault((e.name, _file_of(d.get("loc"))), []).append((e, d.get("value"), "read"))
+        elif e.kind == "snapshot":
+            for v in d.get("values") or []:
+                whole.setdefault((v["name"], v.get("file")), []).append((e, v.get("value"), "snapshot"))
+        elif e.kind == "mutation.capped":
+            caps.setdefault(e.name, e)
+    keys = sorted(set(whole) | set(partial), key=lambda k: (k[0], k[1] or ""))
+    keys += [(n, None) for n in run.watch if not any(k[0] == n for k in keys)]
+
+    out: list[VarState] = []
+    for name, file in keys:
+        ev, parts, VF = whole.get((name, file), []), partial.get((name, file), []), []
+        basis, value, how = ev[-1] if ev else (None, None, None)
+        later = [p for p in parts if basis is None or p.seq > basis.seq]
+        cap = caps.get(name)
+        if basis is not None:
+            who = _req_label(run, run.request_of(basis.eid), basis.eid)
+            at = (basis.data or {}).get("loc") or file
+            what = {"write": f"written at seq {basis.seq} by {who} ({at})", "read": f"read at seq {basis.seq} by {who} ({at})",
+                    "snapshot": f"captured at seq {basis.seq}, when the uncaught error (seq {basis.data.get('error')}) was thrown"}[how]
+            VF.append(Finding(OBSERVED, what, [basis.seq]))
+            if how != "write":  # which recorded write that value goes back to
+                w = next((x for x, _, h in reversed(ev[:-1]) if h == "write"), None)
+                if w is not None:
+                    VF.append(Finding(DERIVED, f"the last recorded whole-value write before it: seq {w.seq} by "
+                                               f"{_req_label(run, run.request_of(w.eid), w.eid)} ({(w.data or {}).get('loc')})",
+                                      [w.seq, basis.seq]))
+                else:
+                    VF.append(Finding(DERIVED, f"no whole-value write of `{name}` was recorded before it", [basis.seq]))
+            if basis.seq < seq:
+                VF.append(Finding(DERIVED, f"latest recorded value, as of seq {basis.seq} ({plural_(seq - basis.seq, 'event')} "
+                                           f"before seq {seq}); not proven to be the value at seq {seq}", [basis.seq]))
+            prev = ev[-2] if len(ev) > 1 else None
+            if prev and how != "write" and not any(prev[0].seq < p.seq < basis.seq for p in parts) and prev[1] != value:
+                VF.append(Finding(DERIVED, f"differs from the previous recorded value (seq {prev[0].seq}: {prev[1]}), with no "
+                                           f"recorded write in between: changed by {_unseen_write(run, name, basis.seq)}",
+                                  [prev[0].seq, basis.seq]))
+            if str(value or "").endswith("…"):
+                VF.append(Finding(DERIVED, "the value preview is truncated at 200 characters", [basis.seq]))
+        status = "known" if basis is not None else "unknown"
+        if later:
+            status = "partial"
+            VF.append(Finding(DERIVED, f"the whole value is unknown after seq {later[0].seq}: {len(later)} later property "
+                                       f"write{'s' if len(later) > 1 else ''} changed it, and only the changed part is recorded",
+                              [p.seq for p in later]))
+            for p in later:
+                pd = p.data or {}
+                VF.append(Finding(OBSERVED, f"seq {p.seq}: `{name}{pd.get('path', '')}` {pd.get('op')} {pd.get('after')}  "
+                                            f"({pd.get('loc')}, {_req_label(run, run.request_of(p.eid), p.eid)})", [p.seq]))
+        if cap is not None and (basis is None or basis.seq < cap.seq):
+            status, value = "unknown", None
+            VF.append(Finding(DERIVED, f"more than {cap.data.get('cap')} writes: writes after seq {cap.seq} weren't recorded, "
+                                       f"and no read since then shows the value", [cap.seq]))
+        if basis is None and not later:
+            VF.append(Finding(DERIVED, f"no write, read or snapshot of `{name}` was recorded at or before seq {seq} "
+                                       f"(the value from its declaration isn't recorded)", []))
+        out.append(VarState(name, file, status, value if status != "unknown" else None, basis, later, VF))
+    if not run.watch:
+        F.append(Finding(DERIVED, "this run was recorded without --watch: no variable state exists. Re-record with "
+                                  "`--watch <variable>` to inspect state", []))
+    elif out:
+        F.append(Finding(DERIVED, "values come only from recorded writes, reads and error snapshots. A write --watch "
+                                  "doesn't see (through an alias, inside a called function, in node_modules) can change a "
+                                  "variable without trace until the next read", []))
+    req = run.requests.get(run.request_of(target.eid if not target.kind.startswith("async.") else target.aid) or -1)
+    return StateAt(target, req, in_flight, complete, out, F)
+
+
 # ---- diff ------------------------------------------------------------------------------
 def tokens(run: Run, everything: bool = False, watched: set[str] | None = None) -> list[tuple[str, Event]]:
     """Run -> comparable tokens with ids and timings normalised away. By default callbacks that belong to no

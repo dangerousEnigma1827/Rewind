@@ -93,6 +93,17 @@ def test_pending_cli(tmp_path):
     assert rw("pending", "nope", home=tmp_path).returncode == 2
 
 
+def test_at_cli(tmp_path):
+    rw("record", "-l", "bad", "-w", "currentCart", "--", "node", "demo/traffic.js", home=tmp_path)
+    t = rw("timeline", "bad", "-k", "error", home=tmp_path)
+    seq = next(l.split()[0] for l in t.stdout.splitlines() if "TypeError" in l)
+    a = rw("at", "bad", seq, "--evidence", home=tmp_path)
+    assert a.returncode == 0 and "currentCart" in a.stdout and "read at seq" in a.stdout and "request #4" in a.stdout
+    assert "in flight:" in a.stdout and "seq " in a.stdout
+    assert rw("at", "bad", "99999", home=tmp_path).returncode == 2
+    assert rw("at", "-1", "0", home=tmp_path).returncode == 0  # -N run refs work here too
+
+
 def test_why_uses_the_source_that_ran_not_the_edited_file(tmp_path):
     app, home = tmp_path / "app", tmp_path / "home"
     shutil.copytree(ROOT / "demo", app)
