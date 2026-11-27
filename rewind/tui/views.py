@@ -40,23 +40,33 @@ def grid(*cols: dict) -> Table:
 
 
 # ---- runs and requests --------------------------------------------------------------------------
-def run_option(row) -> Text:
+def _two_col(left: Text, right: Text) -> Table:
+    """A list row that never wraps: the left side gives way (ellipsis) so the right side stays whole."""
+    g = Table.grid(expand=True)
+    g.add_column(ratio=1, no_wrap=True, overflow="ellipsis")
+    g.add_column(no_wrap=True, justify="right")
+    g.add_row(left, right)
+    return g
+
+
+def run_option(row) -> Table:
     label = f" [label]{escape(row['label'])}[/]" if row["label"] else ""
-    errs = f"  [err.t]{row['error_count']} err[/]" if row["error_count"] else ""
-    return T(f"{STATUS.get(row['status'], '·')} [id]{row['id']}[/]{label}{errs}\n"
-             f"  [dim]{R.ago(row['started_at'])} · {row['event_count']:,} events[/]")
+    errs = f" [err.t]{row['error_count']} err[/]" if row["error_count"] else ""
+    g = _two_col(T(f"{STATUS.get(row['status'], '·')} [id]{row['id']}[/]{label}"), T(errs))
+    g.add_row(T(f"  [dim]{R.ago(row['started_at'])} · {row['event_count']:,} events[/]"), Text(""))
+    return g
 
 
 def command(row) -> str:
     return " ".join((json.loads(row["cmd"]) or []) if row["cmd"] else [])
 
 
-def request_option(run: A.Run, req: A.Request, state: str) -> Text:
+def request_option(run: A.Run, req: A.Request, state: str) -> Table:
     out = req.outbound
     tail = (f"[{'err.t' if out.data.get('status', 0) >= 500 else 'mute'}]{out.data.get('status')}[/] "
             f"[dim]{out.data.get('ms', 0):.0f}ms[/]") if out else {"cancelled": "[write]cancelled[/]",
-                                                                 "unresolved": "[write]no response[/]"}.get(state, "")
-    return T(f"{REQ_STATE.get(state, '·')} {R.req_tag(req.id)} [bold]{escape(R.clip(req.inbound.name, 22))}[/]  {tail}")
+                                                                 "unresolved": "[write]no reply[/]"}.get(state, "")
+    return _two_col(T(f"{REQ_STATE.get(state, '·')} {R.req_tag(req.id)} [bold]{escape(req.inbound.name)}[/]"), T(f" {tail}"))
 
 
 # ---- timeline -----------------------------------------------------------------------------------

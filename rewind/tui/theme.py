@@ -59,7 +59,7 @@ TabbedContent {{ height: 1fr; }}
 TabbedContent ContentSwitcher {{ height: 1fr; }}
 TabPane {{ padding: 0; height: 1fr; }}
 Tabs {{ background: {C['bg']}; height: 2; }}
-Tab {{ color: {C['mute']}; padding: 0 2; }}
+Tab {{ color: {C['mute']}; padding: 0 1; }}
 Tab.-active {{ color: {C['green']}; text-style: bold; }}
 Tab:hover {{ color: {C['text']}; }}
 Underline > .underline--bar {{ background: {C['border']}; color: {C['green']}; }}
@@ -95,6 +95,7 @@ Screen.-medium #details-panel {{ width: 42; }}
 Screen.-compact #sidebar {{ width: 30; }}
 Screen.-compact #details-panel {{ display: none; width: 40; }}
 Screen.-compact.-show-details #details-panel {{ display: block; }}
+Screen.-compact.-show-details #sidebar {{ display: none; }}
 Screen.-narrow #body {{ layout: vertical; }}
 Screen.-narrow #sidebar {{ width: 1fr; height: 10; layout: horizontal; }}
 Screen.-narrow #runs-panel {{ height: 1fr; max-height: 100%; width: 1fr; }}
