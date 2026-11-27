@@ -27,6 +27,8 @@ For an error it reports, with evidence levels:
 For a non-error event (`--seq`, e.g. a log showing a wrong total) it gives the same story but marks a race as **not proven**, because reads aren't recorded.
 Without `--watch` it never claims a mutation: it only suspects module-level state on the failing line and recommends re-recording with `--watch <var>`.
 
+Source text comes from the run's snapshot, taken at ingest and checked against SHA-256 hashes the recorder took as Node loaded each CommonJS file. Editing code after recording doesn't change an old run's analysis. A file edited while the program ran is stored as `changed` with no text, and findings that need its source are omitted rather than computed from the edited file. ESM files have no load-time hash and are snapshotted unverified at ingest. Runs ingested before snapshots existed still read the file on disk. Details in [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
+
 ## Timelines and execution trees
 
 - Timeline: request-tagged story events in `seq` order; internal noise collapsed (~330 events per HTTP request measured in M0 E6, so collapsing is essential).

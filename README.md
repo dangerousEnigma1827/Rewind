@@ -62,7 +62,9 @@ a debugger.
 
    With `--watch VAR`, it also records writes to chosen module-level variables.
 2. **Store.** Events are written synchronously as NDJSON, one per line, to `.rewind/runs/<id>.ndjson`, and the file
-   is kept as ground truth. When the program exits, Python ingests it into SQLite (`.rewind/rewind.db`, WAL mode).
+   is kept as ground truth. When the program exits, Python ingests it into SQLite (`.rewind/rewind.db`, WAL mode),
+   along with a snapshot of your source files, checked against hashes taken as Node loaded them. Editing the code
+   afterwards doesn't change what `why` quotes from an old run.
 3. **Analyse.** Pure Python functions rebuild the async tree from trigger ids and attribute every event to its HTTP
    request. On top of that, they build the timeline and tree, investigate errors (`why`), and align two runs (`diff`).
 4. **Present.** A Typer + Rich CLI renders the results for terminals of any width, with or without colour.

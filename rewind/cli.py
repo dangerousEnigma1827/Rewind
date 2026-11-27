@@ -110,7 +110,7 @@ def runs():
 def _load(ref):
     db = _db()
     row = _run(db, ref)
-    return row, analysis.Run(store.events(db, row["id"]), dict(row))
+    return row, analysis.Run(store.events(db, row["id"]), dict(row), store.sources(db, row["id"]))
 
 
 def _title(row) -> str:

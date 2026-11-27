@@ -397,11 +397,13 @@ def event_text(run, e) -> str:
     if e.kind == "instrument":
         return (f"[mute]{escape(e.name)} {escape(str(d.get('file')))} ({plural(d.get('writes', 0), 'write site')}, "
                 f"watch={','.join(d.get('watch', []))})[/]")
+    if e.kind == "source":
+        return f"[mute]loaded[/] [loc]{escape(e.name or '')}[/]"
     return escape(e.name or "")
 
 
 def context(run, e) -> str:
-    if e.kind.startswith(("run.", "async.")) or e.kind in ("http.in", "http.out", "instrument"):
+    if e.kind.startswith(("run.", "async.")) or e.kind in ("http.in", "http.out", "instrument", "source"):
         return ""
     return f"[mute]in {escape(run.describe(e.eid))}[/]"
 

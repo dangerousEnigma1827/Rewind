@@ -136,6 +136,22 @@ if (OUT && !globalThis.__rewind) {
     guarded(() => emit('error.uncaught', { name: errInfo(err).message, data: { origin, ...errInfo(err) }, stack: parseStack(err && err.stack) }, true));
   });
 
+  // ---- source identity ----------------------------------------------------------
+  // Hash each user CommonJS file as Node loads it, so ingest can prove its source snapshot is the code that ran.
+  const Module = require('module');
+  const crypto = require('crypto');
+  const origCompile = Module.prototype._compile;
+  Module.prototype._compile = function (content, filename) {
+    if (typeof filename === 'string' && keepFile(filename) && !filename.includes(`${path.sep}node_modules${path.sep}`)) {
+      guarded(() => {
+        let sha256 = null;
+        try { sha256 = crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex'); } catch { /* unreadable: ingest reports it */ }
+        emit('source', { name: relFile(filename), data: { sha256 } });
+      });
+    }
+    return origCompile.apply(this, arguments);
+  };
+
   // ---- mutation tracking (opt-in; AST deps loaded only here) -------------------
   const mutCount = Object.create(null);
   if (WATCH.length) {

@@ -1,6 +1,9 @@
 """Ingest of real recorder output into SQLite, run classification, run lookup."""
+import shutil
 import pytest
+from rewind import analysis as A
 from rewind import store
+from conftest import FIX
 
 
 def test_ingest_roundtrip_preserves_every_event(record, rewind_home):
@@ -48,3 +51,49 @@ def test_resolve(record, rewind_home):
         store.resolve(db, "aa")
     with pytest.raises(store.RunNotFound):
         store.resolve(db, "zz")
+
+
+def _copy(tmp_path, fx, name):
+    dst = tmp_path / name
+    shutil.copy(FIX / fx, dst)
+    return dst
+
+
+def test_source_snapshot_is_the_code_that_ran(record, rewind_home, tmp_path):
+    app = _copy(tmp_path, "throw_timer.js", "app.js")
+    original = app.read_text(encoding="utf-8")
+    db, r = store.connect(), record(str(app))
+    store.ingest(db, "snap0001", r.path)
+    app.write_text("// edited after ingest\n", encoding="utf-8")
+    key = next(e["name"] for e in r.kind("source"))
+    assert store.sources(db, "snap0001")[key] == original.replace("\r\n", "\n")
+    status = db.execute("select status from run_sources where run_id=? and path=?", ("snap0001", key)).fetchone()[0]
+    assert status == "verified"
+
+
+def test_source_changed_before_ingest_is_never_shown(record, rewind_home, tmp_path):
+    app = _copy(tmp_path, "throw_timer.js", "app.js")
+    db, r = store.connect(), record(str(app))
+    app.write_text(app.read_text(encoding="utf-8") + "\n// edited while the program ran\n", encoding="utf-8")
+    store.ingest(db, "snap0002", r.path)
+    key = next(e["name"] for e in r.kind("source"))
+    assert store.sources(db, "snap0002")[key] is None
+    assert db.execute("select status from run_sources where path=?", (key,)).fetchone()[0] == "changed"
+
+
+def test_identical_sources_are_stored_once(record, rewind_home, tmp_path):
+    app = _copy(tmp_path, "chain.js", "app.js")
+    db = store.connect()
+    store.ingest(db, "snap0003", record(str(app)).path)
+    store.ingest(db, "snap0004", record(str(app)).path)
+    assert db.execute("select count(*) from sources").fetchone()[0] == 1
+    assert db.execute("select count(*) from run_sources").fetchone()[0] == 2
+
+
+def test_runs_without_snapshots_read_the_file_on_disk(record, rewind_home):
+    db = store.connect()
+    store.ingest(db, "legacy01", record("chain.js").path)
+    db.execute("delete from run_sources")  # what a run ingested before snapshots existed looks like
+    assert store.sources(db, "legacy01") is None
+    run = A.Run(store.events(db, "legacy01"), sources=None)
+    assert "stepA" in run.source_text("tests/fixtures/chain.js")

@@ -1,5 +1,5 @@
 """End-to-end: the installed `rewind` entry point records real node programs."""
-import os, subprocess, sys
+import os, shutil, subprocess, sys
 from pathlib import Path
 from conftest import ROOT
 
@@ -83,3 +83,16 @@ def test_diff_ignores_writes_watched_in_only_one_run(tmp_path):
     d = rw("diff", "good", "bad", home=tmp_path)
     assert "watched in only one run" in d.stdout
     assert "next, B does: #3 http.in POST /order" in d.stdout  # same divergence as with matching --watch
+
+
+def test_why_uses_the_source_that_ran_not_the_edited_file(tmp_path):
+    app, home = tmp_path / "app", tmp_path / "home"
+    shutil.copytree(ROOT / "demo", app)
+    rw("record", "-l", "bad", "--", "node", str(app / "traffic.js"), home=home)
+    src = app / "checkout.js"
+    failing = src.read_text(encoding="utf-8").splitlines()[22]
+    assert "currentCart.items[i].price" in failing
+    src.write_text("// rewritten after the run: no shared cart any more\n", encoding="utf-8")
+    w = rw("why", "bad", home=home)
+    assert w.returncode == 0
+    assert "module-level binding(s) `currentCart`" in w.stdout and failing.strip() in w.stdout

@@ -40,7 +40,7 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 |---|---|
 | `seq` | total order within the run |
 | `t` | µs since recorder start |
-| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `log` `http.in` `http.out` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` |
+| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `log` `http.in` `http.out` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` `source` |
 | `eid` | executionAsyncId at emission |
 | `aid`, `tid` | resource id and trigger id (async events; `http.in` anchors) |
 | `type`, `name` | resource type and callback name; log text, request line, error message, variable name |
@@ -48,6 +48,23 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 | `stack` | `[{fn, file, line, col}]` user-visible frames, max 8, files relative to the cwd |
 
 SQLite: `runs` holds one row per run (status `ok` / `failed` / `crashed`, counts, raw path). `events` mirrors the fields above, keyed by `(run_id, seq)` and indexed on `aid` and `kind`.
+
+**Source snapshots.** Findings that quote source (the failing line, the module-level names on it) must use the code
+that ran, not whatever is on disk when `why` is asked. As Node loads each user CommonJS file, the recorder emits a
+`source` event with the SHA-256 of its bytes. Ingest, which runs as soon as the program exits, reads every user file
+the run loaded or has a stack frame in, and stores it in `sources` (keyed by content hash, so identical files are
+stored once) plus `run_sources(run_id, path, sha256, status)`:
+
+| status | meaning |
+|---|---|
+| `verified` | file on disk matches the load-time hash, so the snapshot is exactly what ran |
+| `unverified` | no load-time hash (ESM isn't hashed); captured at ingest |
+| `changed` | file was edited between load and ingest: no text is kept, so it can't be shown as evidence |
+| `missing` | file unreadable or not UTF-8 |
+
+`Run.source_text()` reads only the snapshot. A file without usable text gives no source line, and the findings that
+need it are left out rather than computed from the wrong code. Runs ingested before snapshots existed have no
+`run_sources` rows and fall back to reading the file from disk, as before.
 
 ## Analysis
 

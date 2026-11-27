@@ -10,9 +10,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from functools import cached_property
-from pathlib import Path
 
-from .store import Event
+from .store import Event, resolve_file
 
 OBSERVED, DERIVED, INFERRED = "observed", "derived", "inferred"
 STORY_KINDS = ("run.start", "run.end", "run.signal", "http.in", "http.out", "log",
@@ -63,9 +62,10 @@ class Request:
 class Run:
     """Indexes over one run's events. Built once; every view reads from here."""
 
-    def __init__(self, events: list[Event], meta: dict | None = None):
+    def __init__(self, events: list[Event], meta: dict | None = None, sources: dict[str, str | None] | None = None):
         self.events = events
         self.meta = meta or {}
+        self.sources = sources  # store.sources(): recorded source snapshots; None = legacy run, read the disk
         self.by_seq = {e.seq: e for e in events}
         self.inits: dict[int, Event] = {}
         self.children: dict[int, list[int]] = {}
@@ -177,15 +177,21 @@ class Run:
         start = next((e for e in self.events if e.kind == "run.start"), None)
         return (start.data or {}).get("cwd") if start else None
 
-    def source_line(self, f: dict | None) -> str | None:
-        if not f:
+    def source_text(self, file: str) -> str | None:
+        """The file as it was when the run was recorded. Snapshotted runs never read the disk: a file that changed
+        before ingest, or was never snapshotted, has no text rather than the wrong text."""
+        if self.sources is not None:
+            return self.sources.get(file)
+        try:  # legacy run ingested before snapshots: the current file is all there is
+            return resolve_file(file, self.cwd).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
             return None
-        p = Path(f["file"])
-        if not p.is_absolute() and self.cwd:
-            p = Path(self.cwd) / p
+
+    def source_line(self, f: dict | None) -> str | None:
+        text = self.source_text(f["file"]) if f else None
         try:
-            return p.read_text(encoding="utf-8").splitlines()[f["line"] - 1]
-        except (OSError, IndexError, UnicodeDecodeError):
+            return text.splitlines()[f["line"] - 1] if text is not None else None
+        except IndexError:
             return None
 
 
@@ -356,13 +362,7 @@ _DECL = re.compile(r"^(?:let|var|const)\s+([A-Za-z_$][\w$]*)|^(?:let|var|const)\
 
 
 def _source(run: Run, frame) -> str:
-    p = Path(frame["file"])
-    if not p.is_absolute() and run.cwd:
-        p = Path(run.cwd) / p
-    try:
-        return p.read_text(encoding="utf-8")
-    except OSError:
-        return ""
+    return run.source_text(frame["file"]) or ""
 
 
 def _top_level_names(run: Run, frame) -> set[str]:

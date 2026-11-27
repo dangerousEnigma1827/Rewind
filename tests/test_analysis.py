@@ -8,7 +8,7 @@ def load(record, rewind_home, fx, env=None, rid="r", **kw):
     r = record(fx, env)
     db = store.connect()
     store.ingest(db, rid, r.path, **kw)
-    return A.Run(store.events(db, rid))
+    return A.Run(store.events(db, rid), sources=store.sources(db, rid))
 
 
 @pytest.fixture
