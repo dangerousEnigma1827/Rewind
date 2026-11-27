@@ -216,7 +216,22 @@ def diff(a: str = typer.Argument(..., help="Baseline run (e.g. good)."),
     render.diff(analysis.diff(A_, B_, all_), _title(ra), _title(rb), evidence)
 
 
+@app.command(cls=RewindCommand)
+def ui():
+    """Interactive investigation: runs, requests, timeline, why, pending, state, tree and diff in one screen."""
+    from . import tui
+    tui.run()
+
+
+def _interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty() and not os.environ.get("REWIND_NO_TUI")
+
+
 def main():
+    if len(sys.argv) == 1 and _interactive():  # bare `rewind` in a terminal opens the app; piped, it stays the landing screen
+        from . import tui
+        tui.run()
+        return
     try:
         app()
     except (BrokenPipeError, OSError) as e:  # reader closed the pipe (e.g. `| head`); Windows reports EINVAL
