@@ -33,6 +33,8 @@ def test_problems_explain_what_to_fix():
     assert R.problems(["demo/traffic.js"], "currentCart", ROOT) == []  # shorthand, watch deps installed
     assert "enter the command" in R.problems([], None, ROOT)[0]
     assert "not found" in R.problems(["node", "nope/missing.js"], None, ROOT)[0]
+    assert "not found" in R.problems(["node", "nopejs"], None, ROOT)[0]  # no extension: resolved like node does
+    assert R.problems(["node", "demo/traffic"], None, ROOT) == []        # node adds .js itself
     assert "instead of `npm`" in R.problems(["npm", "start"], None, ROOT)[0]
     assert "add the script" in R.problems(["node"], None, ROOT)[0]
     assert "JavaScript names" in R.problems(["node", "demo/traffic.js"], "cart, 9x", ROOT)[0]

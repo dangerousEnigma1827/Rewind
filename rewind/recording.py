@@ -91,9 +91,11 @@ def problems(cmd: list[str], watch: str | None, cwd: Path) -> list[str]:
     script = next((a for a in node_cmd[1:] if not a.startswith("-")), None)
     if script is None:
         out.append("add the script to run after node, e.g. node app.js")
-    elif script.lower().endswith(SCRIPT_EXT) or os.sep in script or "/" in script:
+    else:
+        # node resolves its entry point like a relative require: the name, + .js/.mjs/.cjs, or a folder's index.js
         path = Path(script) if Path(script).is_absolute() else cwd / script
-        if not path.exists():
+        candidates = [path, *(path.with_name(path.name + e) for e in SCRIPT_EXT), path / "index.js", path / "package.json"]
+        if not any(c.is_file() for c in candidates):
             out.append(f"script not found: {script} (looked in {cwd})")
     if watch:
         bad = [w for w in (x.strip() for x in watch.split(",")) if w and not re.fullmatch(r"[A-Za-z_$][\w$]*", w)]
