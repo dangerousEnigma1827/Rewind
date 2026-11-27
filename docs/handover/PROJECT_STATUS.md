@@ -10,6 +10,8 @@ As of 2026-11-23, plus the extended-window work of 2026-11-27 (section below). B
 | 1 | F3 `fork()`/`cluster` children no longer corrupt the parent's recording (bug reproduced first) | `30ae2fb` | 2 |
 | 2 | F5 `rewind pending`: requests completed / failed / cancelled / without a response, and unfinished user operations; nothing claimed from incomplete recordings | `3019f96` | 6 |
 | 2 | F12 error-time snapshots of watched values; derived "changed by a write `--watch` doesn't see" | `f2aca36` | 5 |
+| 3 (`feat/watched-state`) | F11 watched reads: `read` events; `why` cites the read and derives "read request #N's value", or rules the race out | `c7cf869` | 6 (+1 changed: the silent overcharge is no longer "not proven" when reads exist) |
+| 3 (`feat/watched-state`) | F14 `rewind at RUN SEQ`: watched state from recorded evidence; known / partial / unknown, never assumed | `29b6bc3` | 6 |
 
 Suite: **74 passed** on Windows 11, Python 3.15.2, Node 24.22.1 (56 on `main` before this branch). The full Phantom Discount walkthrough (7 steps plus `pending`) was re-run on the branch. Recorder overhead on the E6 workload, 9 interleaved runs: `main` 1.39 s vs branch 1.44 s median (baseline 0.61 s), within noise. Not run on Linux or macOS for this branch. Details per feature: [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md), [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
 
