@@ -104,6 +104,8 @@ def _make_console(stderr: bool) -> Console:
 
 console = _make_console(stderr=False)
 err_console = _make_console(stderr=True)
+GLYPHS_MISSING = isinstance(console.file, _GlyphSafe)  # the console font lacks our glyphs: the TUI swaps them too
+GLYPH_TABLE = str.maketrans(FALLBACK)
 
 MARK = "[uv.b]◂◂[/]"
 LEGEND = "[obs]●[/] [mute]observed[/]  [uv]◆[/] [mute]derived[/]  [hyp]? inferred[/]"
@@ -405,7 +407,8 @@ def event_text(run, e) -> str:
     if e.kind == "run.end":
         return f"exit {d.get('code')}"
     if e.kind == "instrument":
-        return (f"[mute]{escape(e.name)} {escape(str(d.get('file')))} ({plural(d.get('writes', 0), 'write site')}, "
+        reads = f", {plural(d['reads'], 'read site')}" if d.get("reads") else ""
+        return (f"[mute]{escape(e.name)} {escape(str(d.get('file')))} ({plural(d.get('writes', 0), 'write site')}{reads}, "
                 f"watch={','.join(d.get('watch', []))})[/]")
     if e.kind == "source":
         return f"[mute]loaded[/] [loc]{escape(e.name or '')}[/]"
@@ -416,6 +419,35 @@ def context(run, e) -> str:
     if e.kind.startswith(("run.", "async.")) or e.kind in ("http.in", "http.out", "instrument", "source"):
         return ""
     return f"[mute]in {escape(run.describe(e.eid))}[/]"
+
+
+def event_row(run, e) -> tuple[str, str, str, str, str, str, str]:
+    """One timeline row as markup cells: seq, ms, rail, request tag, glyph, event, context (shared with the TUI)."""
+    rid = None if e.kind.startswith("run.") else run.request_of(e.aid if e.kind.startswith("async.") else e.eid)
+    rail = "[err]┃[/]" if e.kind in A.ERROR_KINDS else "[mute]│[/]"
+    return (str(e.seq), f"{e.t / 1000:.1f}", rail, req_tag(rid), f"[{kind_style(e.kind)}]{GLYPH.get(e.kind, '·')}[/]",
+            event_text(run, e), context(run, e))
+
+
+def rich_text(markup: str, styles: dict | None = None) -> Text:
+    """Markup -> Text with every named style ("mute", "kind.read", ...) resolved now, against `styles` (the TUI's
+    palette) or the CLI theme. Rich renderables shown outside our Console can't look the names up themselves."""
+    from rich.style import Style
+    from rich.text import Span
+    table = styles or THEME.styles
+
+    def resolve(s):
+        if not isinstance(s, str):
+            return s
+        if s in table:
+            return table[s]
+        try:
+            return Style.parse(s)
+        except Exception:
+            return Style()
+    t = Text.from_markup(markup)
+    out = Text(t.plain, style=resolve(t.style) if t.style else "", spans=[Span(a, b, resolve(st)) for a, b, st in t.spans])
+    return out
 
 
 def timeline(run, rows, show_context=True):
@@ -430,31 +462,31 @@ def timeline(run, rows, show_context=True):
     if show_context:
         t.add_column("context", ratio=1, overflow="ellipsis", no_wrap=True)
     for e in rows:
-        rid = None if e.kind.startswith("run.") else run.request_of(e.aid if e.kind.startswith("async.") else e.eid)
-        rail = "[err]┃[/]" if e.kind in A.ERROR_KINDS else "[mute]│[/]"
-        cells = [str(e.seq), f"{e.t / 1000:.1f}", rail, req_tag(rid), f"[{kind_style(e.kind)}]{GLYPH.get(e.kind, '·')}[/]",
-                 event_text(run, e)]
-        if show_context:
-            cells.append(context(run, e))
-        t.add_row(*cells)
+        cells = event_row(run, e)
+        t.add_row(*(cells if show_context else cells[:-1]))
     console.print(Padding(t, (0, 0, 0, 2)))
+
+
+def tree_label(run, n, title_: str) -> str:
+    """Markup label for one async-tree node (shared with the TUI)."""
+    if n.init is None:
+        return f"[kind.run]◉[/] [bold]{escape(title_)}[/]"
+    rid = run.anchors.get(n.aid)
+    hidden = f" [mute]+{n.hidden} internal[/]" if n.hidden else ""
+    if rid:
+        return f"{req_tag(rid)} [bold]{escape(run.requests[rid].inbound.name)}[/]{hidden}"
+    site = run.site(n.aid)
+    name = f" [fn]{escape(n.init.name)}[/]" if n.init.name and n.init.name != "<anonymous>" else ""
+    where_ = f" [mute]at[/] [loc]{escape(A.where(site))}[/] [mute]in {escape(A.short_fn(site['fn']))}[/]" if site else ""
+    ran = "" if run.fired.get(n.aid) else " [mute](never ran)[/]"
+    err = " [err]✖[/]" if any(e.kind in A.ERROR_KINDS for e in n.events) else ""
+    return f"[kind.async]{escape(n.init.type)}[/]{name}{where_}{hidden}{ran}{err}"
 
 
 def tree(run, root, pruned: int, title_: str):
     """Lineage: requests in their tone, scheduling sites under each callback, errors marked where they ran."""
     def label(n) -> str:
-        if n.init is None:
-            return f"[kind.run]◉[/] [bold]{escape(title_)}[/]"
-        rid = run.anchors.get(n.aid)
-        hidden = f" [mute]+{n.hidden} internal[/]" if n.hidden else ""
-        if rid:
-            return f"{req_tag(rid)} [bold]{escape(run.requests[rid].inbound.name)}[/]{hidden}"
-        site = run.site(n.aid)
-        name = f" [fn]{escape(n.init.name)}[/]" if n.init.name and n.init.name != "<anonymous>" else ""
-        where_ = f" [mute]at[/] [loc]{escape(A.where(site))}[/] [mute]in {escape(A.short_fn(site['fn']))}[/]" if site else ""
-        ran = "" if run.fired.get(n.aid) else " [mute](never ran)[/]"
-        err = " [err]✖[/]" if any(e.kind in A.ERROR_KINDS for e in n.events) else ""
-        return f"[kind.async]{escape(n.init.type)}[/]{name}{where_}{hidden}{ran}{err}"
+        return tree_label(run, n, title_)
 
     def add(parent, n):
         for e in n.events:

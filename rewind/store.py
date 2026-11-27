@@ -28,14 +28,14 @@ create table if not exists run_sources(
 ERROR_KINDS = ("error.uncaught", "error.logged")
 
 
-def home() -> Path:
-    h = Path(os.environ.get("REWIND_HOME") or Path.cwd() / ".rewind")
+def home(base: Path | None = None) -> Path:
+    h = Path(base or os.environ.get("REWIND_HOME") or Path.cwd() / ".rewind")
     (h / "runs").mkdir(parents=True, exist_ok=True)
     return h
 
 
-def connect() -> sqlite3.Connection:
-    db = sqlite3.connect(home() / "rewind.db")
+def connect(base: Path | None = None) -> sqlite3.Connection:
+    db = sqlite3.connect(home(base) / "rewind.db")
     db.row_factory = sqlite3.Row
     db.execute("pragma journal_mode=wal")
     db.executescript(SCHEMA)
