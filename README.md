@@ -231,7 +231,8 @@ commands. You don't need to know any command to use it:
 | `n` `h` `?` `q` | record a program · home · help · quit |
 | `tab` / `1`–`4` | move between recordings, requests, main view, details |
 | `↑ ↓` `j k` `g G` | move within a list |
-| `o` `w` `t` `p` `s` `e` `d` | Overview · Explain · Timeline · Unfinished · Variables · Tree · Compare |
+| `o` `w` `t` `p` `s` `e` `d` | Overview · Explain · Timeline · Unfinished · Variables · Tree · Compare (each tab shows its key) |
+| `<` `>` | previous / next view (wraps around); tabs are also clickable and the tab bar scrolls when it doesn't fit |
 | `/` `f` `c` `a` `esc` | search · kind filter · callback starts · every event · clear |
 | `enter` `]` `[` | open; show a finding's evidence and step through it |
 | `b` `r` `i` `\` | compare others against this run · reload · details · sidebar |

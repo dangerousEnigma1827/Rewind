@@ -2,7 +2,7 @@
 
 Back to [HANDOVER.md](HANDOVER.md). The test suite, the test-count history, the M0 experiments, M7 fresh-clone verification, and the terminal compatibility matrix. Bugs found in testing, with root causes and fixes, are in [ENGINEERING_LOG.md](ENGINEERING_LOG.md#3-bug-fix-and-verification-record).
 
-**Latest result:** 118 / 118 on Windows 11 (Python 3.15.2, Node 24.22.1, Textual 8.2.8) on `feat/ultraviolet-tui` (`test_tui.py` rewritten for the redesign: 27 tests; `test_recording.py` added: 5); 102 on `feat/rewind-tui`; 86 on `feat/watched-state`; 74 at `f2aca36` on `feat/recording-reliability` (none run on Linux). Before that: 54 / 54 on Windows 11 and Ubuntu 24.04 under WSL2 at `6320276`; `main` has 56. The tables below describe the suite at `6320276`; the extended-window additions are listed after them.
+**Latest result:** 130 / 130 on `feat/tui-visual-polish` (adds `test_tui_polish.py`: 12; note that Textual's `run_test()` hides toasts unless `notifications=True`). Before that, 118 / 118 on Windows 11 (Python 3.15.2, Node 24.22.1, Textual 8.2.8) on `feat/ultraviolet-tui` (`test_tui.py` rewritten for the redesign: 27 tests; `test_recording.py` added: 5); 102 on `feat/rewind-tui`; 86 on `feat/watched-state`; 74 at `f2aca36` on `feat/recording-reliability` (none run on Linux). Before that: 54 / 54 on Windows 11 and Ubuntu 24.04 under WSL2 at `6320276`; `main` has 56. The tables below describe the suite at `6320276`; the extended-window additions are listed after them.
 
 ## Test suite (verified by reading `tests/`)
 

@@ -22,8 +22,10 @@ As of 2026-11-23, plus the extended-window work of 2026-11-27 (section below). B
 | 5 (`feat/ultraviolet-tui`) | fix: resolve the script to record like node does | `9cf5b2a` | (+2 asserts) |
 | 5 (`feat/ultraviolet-tui`) | Ultraviolet theme from the website's tokens | `b433f27` | — |
 | 5 (`feat/ultraviolet-tui`) | first-run experience: Home, Record, Overview, plain names, grouped evidence, help | `bda5009` | 27 (replacing 16) |
+| 6 (`feat/tui-visual-polish`) | visual polish: inputs and buttons without spill, Home hierarchy, tab keys and scrolling, `<` `>`, thin scrollbars, redesigned help ([TUI_VISUAL_POLISH.md](TUI_VISUAL_POLISH.md)) | `704329a` | — |
+| 6 (`feat/tui-visual-polish`) | fix: view keys bounced back from inside another view | `995427e` | 12 |
 
-Suite: **74 passed** at the end of Part 2, **86** after Part 3 **102** on `feat/rewind-tui` and **118** on `feat/ultraviolet-tui`, on Windows 11, Python 3.15.2, Node 24.22.1 (56 on `main` before this work). Branches stack: `main` ← `feat/recording-reliability` ← `feat/watched-state` ← `feat/rewind-tui` ← `feat/ultraviolet-tui`. None is pushed or merged. The full Phantom Discount walkthrough (7 steps plus `pending`) was re-run on the branch. Recorder overhead on the E6 workload, 9 interleaved runs: `main` 1.39 s vs branch 1.44 s median (baseline 0.61 s), within noise. Not run on Linux or macOS for this branch. Details per feature: [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md), [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
+Suite: **74 passed** at the end of Part 2, **86** after Part 3 **102** on `feat/rewind-tui` and **118** on `feat/ultraviolet-tui` and **130** on `feat/tui-visual-polish`, on Windows 11, Python 3.15.2, Node 24.22.1 (56 on `main` before this work). Branches stack: `main` ← `feat/recording-reliability` ← `feat/watched-state` ← `feat/rewind-tui` ← `feat/ultraviolet-tui` ← `feat/tui-visual-polish`. None is pushed or merged. The full Phantom Discount walkthrough (7 steps plus `pending`) was re-run on the branch. Recorder overhead on the E6 workload, 9 interleaved runs: `main` 1.39 s vs branch 1.44 s median (baseline 0.61 s), within noise. Not run on Linux or macOS for this branch. Details per feature: [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md), [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Branch and commit state
 
