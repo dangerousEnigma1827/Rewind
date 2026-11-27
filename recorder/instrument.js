@@ -96,6 +96,9 @@ function instrument(src, file, watch) {
       if (c.type === 'MemberExpression' && !c.computed && MUT_METHODS.has(c.property.name)) wrap(n, c.object, `.${c.property.name}()`, anc);
     },
   });
+  // Getters for the error-time snapshot, on a new last line so no existing line or column moves. They run when the
+  // module body finishes; an error thrown while it is still running finds this file not yet registered.
+  ms.append(`\n;__rw.reg(${JSON.stringify(rel)},{${[...targets].map(t => `${JSON.stringify(t)}:()=>${t}`).join(',')}});`);
   return { code: ms.toString(), writes, names: [...targets] };
 }
 

@@ -74,6 +74,7 @@ if (OUT && !globalThis.__rewind) {
     try { line = JSON.stringify(ev); } catch { line = JSON.stringify({ seq: ev.seq, t: ev.t, kind, eid: ev.eid, name: '[unserializable]' }); }
     buf.push(line);
     if (urgent || buf.length >= FLUSH_EVERY) flush();
+    return ev.seq;
   }
   function flush() {
     if (!buf.length || closed) return;
@@ -158,7 +159,13 @@ if (OUT && !globalThis.__rewind) {
   // ---- errors ------------------------------------------------------------------
   // Monitor only: observes without changing crash semantics or exit codes (E2/E3).
   process.on('uncaughtExceptionMonitor', (err, origin) => {
-    guarded(() => emit('error.uncaught', { name: errInfo(err).message, data: { origin, ...errInfo(err) }, stack: parseStack(err && err.stack) }, true));
+    guarded(() => {
+      const at = emit('error.uncaught', { name: errInfo(err).message, data: { origin, ...errInfo(err) }, stack: parseStack(err && err.stack) }, true);
+      // --watch: the watched variables' values at this moment, tied to this error by its seq
+      let values = null;
+      try { values = globalThis.__rw && globalThis.__rw.snapshot(); } catch { /* never let a snapshot change the crash */ }
+      if (values && values.length) emit('snapshot', { name: 'uncaught error', data: { error: at, values } }, true);
+    });
   });
 
   // ---- source identity ----------------------------------------------------------
@@ -181,7 +188,14 @@ if (OUT && !globalThis.__rewind) {
   const mutCount = Object.create(null);
   if (WATCH.length) {
     const { installHook } = require('./instrument');
+    const registry = []; // [file, {name: getter}] per instrumented file, registered when its module body finishes
     globalThis.__rw = {
+      reg(file, getters) { registry.push([file, getters]); },
+      snapshot() { // read() never throws: TDZ, throwing getters/toJSON and unserialisable values become text
+        const out = [];
+        for (const [file, getters] of registry) for (const name of Object.keys(getters)) out.push({ name, file, value: read(getters[name]) });
+        return out;
+      },
       w(name, p, op, loc, before, value, after) {
         if (inHook) return value;
         const n = mutCount[name] = (mutCount[name] || 0) + 1;
@@ -196,7 +210,11 @@ if (OUT && !globalThis.__rewind) {
   function preview(v) {
     if (typeof v === 'function') return `[Function ${v.name || 'anonymous'}]`;
     try { const s = JSON.stringify(v); return s === undefined ? String(v) : s.length > 200 ? s.slice(0, 199) + '…' : s; }
-    catch { return Object.prototype.toString.call(v); }
+    catch { // circular, BigInt, throwing getter/toJSON; the tag lookup itself can throw on a hostile Proxy
+      let tag = 'value';
+      try { tag = Object.prototype.toString.call(v).slice(8, -1); } catch { }
+      return `[unserialisable ${tag}]`;
+    }
   }
   function read(f) { try { return preview(f()); } catch (e) { return `[threw ${e && e.name}]`; } }
 

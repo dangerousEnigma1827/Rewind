@@ -379,6 +379,9 @@ def event_text(run, e) -> str:
         return f"{escape(run.describe(e.aid))} [mute]fired · scheduled at[/] [loc]{escape(A.where(run.site(e.aid)))}[/]"
     if e.kind == "async.init":
         return f"{escape(run.describe(e.aid))} [mute]created at[/] [loc]{escape(A.where(A.user_frame(e.stack)))}[/]"
+    if e.kind == "snapshot":
+        vals = "  ".join(f"{v['name']} = {clip(v.get('value'))}" for v in d.get("values", []))
+        return f"[mute]watched values at error seq {d.get('error')}:[/] {escape(vals)}"
     if e.kind == "http.abort":
         return f"[err.t]closed before a response[/] {escape(e.name or '')} [mute]{d.get('ms', 0):.1f}ms[/]"
     if e.kind in ("async.after", "async.resolve", "async.cancel"):

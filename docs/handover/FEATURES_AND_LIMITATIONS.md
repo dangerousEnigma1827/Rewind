@@ -62,6 +62,8 @@ Not captured:
 - reads (never recorded)
 
 More than `REWIND_MUT_CAP` (default 10 000) writes to one name → counting continues, values stop.
+
+**Error-time snapshots.** With `--watch`, each instrumented file gets one appended line, after its last line so no existing line or column moves, that registers a getter per watched top-level name (`__rw.reg`). In `uncaughtExceptionMonitor`, right after the `error.uncaught` event, the recorder reads every getter and emits a `snapshot` event: `data.error` is that error's seq, and `values` is `[{name, file, value}]`. Reads never throw: TDZ and throwing getters become `[threw X]`, and values JSON can't serialise become `[unserialisable Type]` (mutation previews use the same rule now; they used to print `[object Type]`). The read sits inside its own `try`, so it can never change the crash. `why` on an uncaught error reports ● each value and, when it differs from the `after` of the variable's last whole-variable write (path `""`) in the same file, ◆ that a write `--watch` doesn't see changed it (or one past the cap). Not covered: `error.logged` (only uncaught errors are snapshotted), ESM files, and errors thrown while a file's module body is still running (that file isn't registered yet). Serialising a value runs its `toJSON`/getters at crash time.
 Requires `npm install --prefix recorder` (acorn, acorn-walk, magic-string); without `--watch` the recorder needs no npm packages. If they are missing, a `--watch` run crashes at preload with Node's `Cannot find module 'acorn'` (verified M7).
 
 ## Supported scenarios

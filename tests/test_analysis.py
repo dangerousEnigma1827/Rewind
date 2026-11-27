@@ -170,6 +170,31 @@ def test_diff_good_vs_bad_points_at_the_interleaving(demo):
     assert len(A.tokens(bad, everything=True)) > len(res.b)
 
 
+# ---- error-time snapshots (F12) ------------------------------------------------------
+def test_why_reports_values_at_the_error_and_unrecorded_changes(record, rewind_home):
+    run = load(record, rewind_home, "snapshot.js", {"REWIND_WATCH": "currentCart,count"})
+    inv = A.investigate(run, run.errors[0])
+    assert_evidence_integrity(run, inv)
+    snap = A.snapshot_of(run, run.errors[0])
+    obs = levels(inv, A.OBSERVED)
+    assert '`currentCart` when the error was thrown: {"order":"Z","items":[1,2]}' in obs
+    assert "`count` when the error was thrown: 1" in obs
+    differs = [f for f in inv.findings if "differs from the value recorded at its last write" in f.text]
+    assert len(differs) == 1 and differs[0].level == A.DERIVED and "`currentCart`" in differs[0].text
+    assert "alias" in differs[0].text and snap.seq in differs[0].evidence
+    assert run.by_seq[differs[0].evidence[0]].kind == "mutation"
+
+
+def test_why_on_demo_snapshot_matches_the_last_write(demo):
+    run = demo()
+    inv = A.investigate(run, run.errors[0])
+    assert_evidence_integrity(run, inv)
+    assert any(t.startswith("`currentCart` when the error was thrown: {\"order\":\"C-303\"") for t in levels(inv, A.OBSERVED))
+    assert not any("differs from the value recorded" in f.text for f in inv.findings)
+    unwatched = demo(watch=False)
+    assert not any("when the error was thrown" in f.text for f in A.investigate(unwatched, unwatched.errors[0]).findings)
+
+
 # ---- pending (F5) --------------------------------------------------------------------
 def by_url(run, rep):
     return {run.requests[rid].inbound.data["url"]: st for rid, st in rep.states.items()}

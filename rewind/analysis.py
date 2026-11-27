@@ -15,7 +15,7 @@ from .store import Event, resolve_file
 
 OBSERVED, DERIVED, INFERRED = "observed", "derived", "inferred"
 STORY_KINDS = ("run.start", "run.end", "run.signal", "http.in", "http.out", "http.abort", "log",
-               "error.uncaught", "error.logged", "mutation", "mutation.capped", "instrument")
+               "error.uncaught", "error.logged", "mutation", "mutation.capped", "instrument", "snapshot")
 ERROR_KINDS = ("error.uncaught", "error.logged")
 
 
@@ -306,6 +306,7 @@ def investigate(run: Run, target: Event) -> Investigation:
     if run.watch:
         for name in run.watch:
             F.extend(_watched_findings(run, target, req, name, line if name in names_on_line else None))
+        F.extend(_snapshot_findings(run, target))
     elif is_error and line:
         # Without --watch no mutation may be claimed: only point at module-level names on the failing line.
         top = _top_level_names(run, frame)
@@ -355,6 +356,36 @@ def _watched_findings(run: Run, target: Event, req: Request | None, name: str, f
         F.append(Finding(INFERRED, f"if {req.label} read `{name}` after seq {foreign[-1].seq}, it got request {who}'s data, not its own: "
                                    f"a likely race between concurrent requests. (Reads are not recorded, so this is not proven.)",
                          [*[w.seq for w in own[-1:]], foreign[-1].seq, target.seq]))
+    return F
+
+
+def snapshot_of(run: Run, error: Event) -> Event | None:
+    """The watched-value snapshot the recorder took for this uncaught error (it carries the error's seq)."""
+    return next((e for e in run.events if e.kind == "snapshot" and (e.data or {}).get("error") == error.seq), None)
+
+
+def _snapshot_findings(run: Run, target: Event) -> list[Finding]:
+    snap = snapshot_of(run, target) if target.kind == "error.uncaught" else None
+    if snap is None:
+        return []
+    F: list[Finding] = []
+    values = snap.data.get("values") or []
+    dup = {v["name"] for v in values if sum(w["name"] == v["name"] for w in values) > 1}
+    for v in values:
+        name, value, file = v["name"], v.get("value"), v.get("file")
+        label = f"`{name}`" + (f" in {file}" if name in dup else "")
+        F.append(Finding(OBSERVED, f"{label} when the error was thrown: {value}", [snap.seq]))
+        # Only a whole-variable write records the whole value, so only that can be compared with the snapshot.
+        writes = [e for e in run.events if e.kind == "mutation" and e.name == name and e.seq < target.seq
+                  and str((e.data or {}).get("loc", "")).rsplit(":", 2)[0] == file]
+        last = writes[-1] if writes else None
+        if last is not None and (last.data or {}).get("path") == "" and last.data.get("after") != value:
+            capped = any(e.kind == "mutation.capped" and e.name == name and e.seq < target.seq for e in run.events)
+            how = ("one of the writes past the recording cap, or a write --watch doesn't see" if capped else
+                   "a write --watch doesn't see (through an alias, inside a called function, or in node_modules)")
+            F.append(Finding(DERIVED, f"{label} differs from the value recorded at its last write (seq {last.seq}: "
+                                      f"{last.data.get('after')}), so it was changed after that by {how}",
+                             [last.seq, snap.seq]))
     return F
 
 

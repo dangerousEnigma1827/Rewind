@@ -164,6 +164,38 @@ def test_mutation_cap(record):
     assert r.events[-1]["data"]["mutations"] == {"counter": 50}
 
 
+SNAP_WATCH = {"REWIND_WATCH": "currentCart,count,circular,trap,big,missing"}
+
+
+def test_error_snapshot_records_watched_values_safely(record):
+    plain = record("snapshot.js", recorder=False)
+    r = record("snapshot.js", SNAP_WATCH)
+    assert r.code == plain.code == 1 and r.stdout == plain.stdout  # behaviour unchanged
+    assert "snapshot.js:17" in r.stderr and "snapshot.js:17" in plain.stderr  # appended getters move no line
+    err, = r.kind("error.uncaught")
+    snap, = r.kind("snapshot")
+    assert snap["data"]["error"] == err["seq"] and snap["seq"] > err["seq"] and snap["eid"] == err["eid"]
+    vals = {v["name"]: v["value"] for v in snap["data"]["values"]}
+    assert vals == {"currentCart": '{"order":"Z","items":[1,2]}',  # includes the alias write --watch can't see
+                    "count": "1", "circular": "[unserialisable Object]", "trap": "[unserialisable Object]",
+                    "big": "[unserialisable BigInt]"}  # `missing` isn't declared anywhere: not registered
+    assert {v["file"] for v in snap["data"]["values"]} == {"tests/fixtures/snapshot.js"}
+
+
+def test_each_uncaught_error_gets_its_own_snapshot(record):
+    plain = record("snapshot.js", {"SNAP_TWICE": "1"}, recorder=False)
+    r = record("snapshot.js", {**SNAP_WATCH, "SNAP_TWICE": "1"})
+    assert r.code == plain.code == 0 and r.stdout == plain.stdout == "handled first\nhandled second\n"
+    errs = {e["seq"]: e["name"] for e in r.kind("error.uncaught")}
+    got = {errs[s["data"]["error"]]: {v["name"]: v["value"] for v in s["data"]["values"]}["count"] for s in r.kind("snapshot")}
+    assert got == {"first": "10", "second": "20"}
+
+
+def test_no_snapshot_without_watch(record):
+    r = record("snapshot.js")
+    assert r.kind("error.uncaught") and not r.kind("snapshot")
+
+
 def test_esm_not_instrumented_and_unharmed(record):
     r = record("esm_watch.mjs", {"REWIND_WATCH": "currentCart"})
     assert r.code == 0 and "esm ok 1" in r.stdout and not r.kind("mutation")

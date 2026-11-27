@@ -33,6 +33,7 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 | re-entrancy | one `inHook` guard wraps every recorder entry point |
 | child processes | after opening `REWIND_OUT` the recorder deletes it from `process.env`; `fork()`/`cluster` children inherit `--require recorder.js` but stay inert, so they can't truncate the parent's file |
 | durability | flush every 256 events, immediately on error events, on `exit`, and on SIGINT/SIGTERM (re-raised only if the app has no handler of its own) |
+| error-time values | with `--watch`, each instrumented file ends with an appended `__rw.reg(file, {name: () => name})` line; on an uncaught error the monitor reads them (never throwing) into a `snapshot` event carrying the error's seq |
 | `--watch` | `instrument.js` (acorn + magic-string, loaded lazily) wraps writes as `__rw.w(name, path, op, loc, before, (expr), reread)`. It preserves the expression's value and its line, reads `before` only when re-evaluating is side-effect free, and skips shadowed names. |
 
 ## Event schema
@@ -41,7 +42,7 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 |---|---|
 | `seq` | total order within the run |
 | `t` | µs since recorder start |
-| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `async.cancel` `log` `http.in` `http.out` `http.abort` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` `source` |
+| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `async.cancel` `log` `http.in` `http.out` `http.abort` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` `source` `snapshot` |
 | `eid` | executionAsyncId at emission |
 | `aid`, `tid` | resource id and trigger id (async events; `http.in` anchors) |
 | `type`, `name` | resource type and callback name; log text, request line, error message, variable name |
@@ -78,6 +79,7 @@ need it are left out rather than computed from the wrong code. Runs ingested bef
   - the collapsed causal chain to the owning request, and other requests' observable activity while it was in flight (derived)
   - for each watched variable: whether the failing source line reads it (derived), the last write (observed) and who made it (derived), and the own-write → foreign-overwrite → target ordering (derived)
   - a race explanation (inferred, citing those seqs)
+  - for an uncaught error with `--watch`: each watched value when it was thrown (observed, from the `snapshot` event whose `data.error` is that error's seq), and whether it differs from the last whole-variable write, which would mean an unrecorded write (derived)
 
   Without `--watch`, it can only point out module-level names on the failing line and recommend `--watch`. It never claims a write.
 - **`pending(run)`.** This is `pending`. It works only from lifecycle events already in the stream: `http.in`/`http.out`, `http.abort` (response closed before `finish`), `async.init` (Timeout inits carry `data.delay`), `async.before`, `async.resolve` (fires for rejections too) and `async.cancel` (the recorder wraps `clearTimeout`/`clearInterval`/`clearImmediate`, mapping the timer object to its aid with a WeakMap). Absence is evidence only in a complete recording (`run.end`, or `run.signal`, which flushes, and no torn lines). Request states are completed / failed / cancelled / unresolved. Unfinished user-created operations are derived. "Likely stalled" is inferred, and never after an uncaught error.

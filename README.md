@@ -279,7 +279,13 @@ a watched variable declared at the top level of that file is recorded. That cove
 - **reads**: never recorded.
 
 So "this overwrite caused the failure" is always marked inferred. Values are JSON previews of up to 200
-characters. A variable written more than `REWIND_MUT_CAP` times keeps counting, but its values stop being recorded.
+characters. A value JSON can't represent (circular, BigInt, a throwing getter) is recorded as `[unserialisable Type]`.
+
+When an uncaught error happens, the recorder also takes a **snapshot** of every watched variable's current value,
+tied to that error. `why` reports it as observed. If it differs from the value recorded at the variable's last
+whole-variable write, `why` derives that something `--watch` can't see changed it in between, such as an alias.
+Snapshots read a file's variables only after its module body has finished, so an error thrown while a file is
+still loading has no snapshot for that file. A variable written more than `REWIND_MUT_CAP` times keeps counting, but its values stop being recorded.
 The AST dependencies load only when `--watch` is used.
 
 **Other limits:**
