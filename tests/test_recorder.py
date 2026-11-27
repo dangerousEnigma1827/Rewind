@@ -28,6 +28,27 @@ def test_reentrancy_recorder_never_records_itself(record):
         assert befores - afters in (0, 1), fx  # 1 = callback that threw and never returned
 
 
+def test_forked_child_leaves_the_parent_recording_intact(record):
+    r = record("fork_parent.js")
+    assert r.code == 0
+    assert "child ran with --require" in r.stdout and "child done" in r.stdout  # the child really loaded the preload
+    raw = r.path.read_bytes()
+    assert b"\x00" not in raw  # read_events() above already parsed every line as JSON
+    assert [e["seq"] for e in r.events] == list(range(len(r.events)))
+    starts = r.kind("run.start")
+    assert len(starts) == 1 and starts[0]["data"]["argv"] == ["tests/fixtures/fork_parent.js"]
+    assert [e["name"] for e in r.kind("log")] == ["parent before", "parent after, child exit 0"]
+    assert r.events[0]["kind"] == "run.start" and r.events[-1]["kind"] == "run.end"
+
+
+def test_cluster_worker_leaves_the_primary_recording_intact(record):
+    r = record("cluster_primary.js")
+    assert r.code == 0 and "worker ran" in r.stdout
+    assert b"\x00" not in r.path.read_bytes() and [e["seq"] for e in r.events] == list(range(len(r.events)))
+    assert len(r.kind("run.start")) == 1 and r.events[-1]["kind"] == "run.end"
+    assert [e["name"] for e in r.kind("log")] == ["primary before", "primary after, worker exit 0"]
+
+
 def test_inert_without_rewind_out(record):
     a = record("chain.js", recorder=False)
     b = record("chain.js", env={"REWIND_OUT": ""}, recorder=False)

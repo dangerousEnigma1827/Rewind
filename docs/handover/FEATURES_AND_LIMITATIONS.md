@@ -67,7 +67,7 @@ Requires `npm install --prefix recorder` (acorn, acorn-walk, magic-string); with
 
 ## Unsupported scenarios / known limitations
 
-- `https`, `http2`, outgoing HTTP clients as request anchors, worker threads, child processes: not instrumented.
+- `https`, `http2`, outgoing HTTP clients as request anchors, worker threads, child processes: not instrumented. The recorder removes `REWIND_OUT` from its own environment once it has opened the file, so a `fork()`ed or `cluster` child, which inherits `--require recorder.js` through `execArgv`, stays inert instead of overwriting the parent's recording (regression tests `test_forked_child_leaves_the_parent_recording_intact` and `test_cluster_worker_leaves_the_primary_recording_intact`). The app's own code no longer sees `REWIND_OUT` in `process.env`.
 - `--unhandled-rejections=warn|none`: rejections not recorded.
 - SIGKILL: abrupt termination can lose up to the last 256 buffered non-error events; error events are written immediately, and the run is marked `crashed`.
 - Not a full time-travel debugger: no per-function-call tracing, no arbitrary variable values, no stepping backwards, no breakpoints, no web UI.

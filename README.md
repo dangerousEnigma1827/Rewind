@@ -283,7 +283,8 @@ The AST dependencies load only when `--watch` is used.
 
 **Other limits:**
 - HTTP attribution covers Node's `http` server, including keep-alive. `https`, `http2`, outgoing HTTP clients, worker
-  threads and child processes are not instrumented.
+  threads and child processes are not instrumented. A child started with `fork()` or `cluster` loads the recorder but
+  stays inert, so only the parent is recorded and its recording stays intact.
 - Unhandled rejections are captured only in Node's default `--unhandled-rejections=throw` mode.
 - A run killed with SIGKILL loses up to its last 256 events. Error events are flushed immediately, so they survive,
   and the run is marked `crashed`.

@@ -20,6 +20,10 @@ if (OUT && !globalThis.__rewind) {
   const CWD = process.cwd();
 
   const fd = fs.openSync(OUT, 'w');
+  // This process now owns the file. Child processes inherit env, and fork()/cluster also inherit execArgv
+  // (--require recorder.js); without this their recorder would reopen OUT with 'w' and corrupt this recording.
+  // Children stay unrecorded (documented), and the preload is inert in them.
+  delete process.env.REWIND_OUT;
   const t0 = process.hrtime.bigint();
   let seq = 0, buf = [], inHook = false, closed = false;
 

@@ -31,6 +31,7 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 | requests | patched `http.Server.prototype.emit('request')`. Each request gets its own `AsyncResource('REWIND_REQUEST')`, and the handler plus all `req`/`res` event callbacks run in its scope. Node's own `HTTPINCOMINGMESSAGE` is per connection, so without this, keep-alive requests are attributed to each other. Found while building the demo; there's a regression test. |
 | errors | `uncaughtExceptionMonitor` only, which observes without changing crash semantics. For sync throws the context is the throwing callback. For rejections it is the rejected promise, whose ancestry leads back to the caller (spikes E2/E3). `console.error(err)` produces `error.logged`. |
 | re-entrancy | one `inHook` guard wraps every recorder entry point |
+| child processes | after opening `REWIND_OUT` the recorder deletes it from `process.env`; `fork()`/`cluster` children inherit `--require recorder.js` but stay inert, so they can't truncate the parent's file |
 | durability | flush every 256 events, immediately on error events, on `exit`, and on SIGINT/SIGTERM (re-raised only if the app has no handler of its own) |
 | `--watch` | `instrument.js` (acorn + magic-string, loaded lazily) wraps writes as `__rw.w(name, path, op, loc, before, (expr), reread)`. It preserves the expression's value and its line, reads `before` only when re-evaluating is side-effect free, and skips shadowed names. |
 

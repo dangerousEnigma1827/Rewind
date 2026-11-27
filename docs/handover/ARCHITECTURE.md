@@ -63,7 +63,7 @@ Other recorded sources:
 - Each request gets its own `AsyncResource('REWIND_REQUEST')`; the handler and all `req`/`res` event callbacks run inside its scope. `http.in` is emitted as the request's anchor (`aid` of that resource); `http.out` when the response finishes (status, duration).
 - Why: Node's own `HTTPINCOMINGMESSAGE` resource is per *connection*, so without this, keep-alive requests on one socket are attributed to each other. Found while building the demo; regression test `test_keepalive_requests_get_distinct_anchors`.
 - Analysis: `request_of(aid)` walks `tid` links upward until the first request anchor → that request number (derived).
-- Not covered: `https`, `http2`, outgoing client requests as anchors, worker threads, child processes.
+- Not covered: `https`, `http2`, outgoing client requests as anchors, worker threads, child processes. Forked and `cluster` children inherit the preload but find no `REWIND_OUT` (the recorder deletes it from `process.env` after opening the file), so they stay inert and can't corrupt the parent's file.
 
 ## 3. Optional AST-based mutation tracking (`recorder/instrument.js`)
 
