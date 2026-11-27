@@ -821,8 +821,14 @@ class RewindApp(App):
 
     def action_view(self, name: str):
         views = self._q("#views", TabbedContent)
+        # If focus is inside the current view, it must move into the new one: otherwise Textual hands it to a sibling
+        # in the now-hidden pane, and TabbedContent switches straight back to that pane.
+        f = self.focused
+        inside = f is not None and views in f.ancestors
         if views.active != name:
             views.active = name
+            if inside:
+                self.action_focus_panel("main")
         if name == "tree":
             self.refresh_tree()
         if name == "state":
