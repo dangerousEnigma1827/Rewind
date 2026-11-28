@@ -416,7 +416,11 @@ def event_text(run, e) -> str:
 
 
 def context(run, e) -> str:
-    if e.kind.startswith(("run.", "async.")) or e.kind in ("http.in", "http.out", "instrument", "source"):
+    if e.kind == "http.out":  # the response's own eid is the request; http.end says which callback sent it
+        r = run.requests.get((e.data or {}).get("req"))
+        end = r.end if r else None
+        return f"[mute]sent from {escape(run.describe(end.eid))}[/]" if end and end.eid != r.anchor else ""
+    if e.kind.startswith(("run.", "async.")) or e.kind in ("http.in", "http.end", "instrument", "source"):
         return ""
     return f"[mute]in {escape(run.describe(e.eid))}[/]"
 
@@ -480,7 +484,14 @@ def tree_label(run, n, title_: str) -> str:
     where_ = f" [mute]at[/] [loc]{escape(A.where(site))}[/] [mute]in {escape(A.short_fn(site['fn']))}[/]" if site else ""
     ran = "" if run.fired.get(n.aid) else " [mute](never ran)[/]"
     err = " [err]✖[/]" if any(e.kind in A.ERROR_KINDS for e in n.events) else ""
-    return f"[kind.async]{escape(n.init.type)}[/]{name}{where_}{hidden}{ran}{err}"
+    rel = ""
+    if n.released_by:  # waited on a promise that another request's (or no request's) callback settled
+        aid, res = n.released_by
+        rr = run.request_of(aid)
+        s = run.site(aid)
+        rel = (f"  [mute]⇠ waited on[/] {req_tag(rr) if rr else '[mute]work outside any request:[/]'} "
+               f"[mute]{escape(run.describe(aid))}{' at ' + escape(A.where(s)) if s else ''}, settled seq {res.seq}[/]")
+    return f"[kind.async]{escape(n.init.type)}[/]{name}{where_}{hidden}{ran}{err}{rel}"
 
 
 def tree(run, root, pruned: int, title_: str):

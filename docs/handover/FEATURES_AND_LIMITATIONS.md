@@ -13,7 +13,7 @@ Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. C
 | `rewind runs` | — | Recorded runs, newest first (id, label, status, counts). |
 | `rewind timeline [RUN]` | `-r/--request N`, `-k/--kind log,http,error,mutation,async,run`, `-c/--callbacks`, `--raw` | The run's story in order: requests, logs, writes, errors. `-r` one request; `-c` adds every user callback firing; `--raw` every recorded event unfiltered. |
 | `rewind tree [RUN]` | `-r/--request N`, `--full` | Async causality tree ("who scheduled whom"). Quiet branches pruned and internal hops folded unless `--full`; reports how much it hid. |
-| `rewind why [RUN]` | `-e/--error N` (default 1), `-s/--seq SEQ`, `--evidence` | Causal investigation of error N, or of any event by seq. |
+| `rewind why [RUN]` | `-e/--error N` (default 1), `-s/--seq SEQ`, `-r/--request N`, `--evidence` | Causal investigation of error N, of any event by seq, or of request N's response (who sent it and the path to it). |
 | `rewind diff A B` | `--all`, `--evidence` | Aligns two runs and finds the first divergence. `--all` includes callbacks outside any request (harness/plumbing). |
 | `rewind ui` (or bare `rewind` on an interactive terminal) | — | The interactive app: runs, requests, timeline, why, pending, state, tree and diff, with evidence navigation. Piped or scripted, bare `rewind` still prints the landing screen and exits 2. Keys: `?` in the app, or the README. |
 | `rewind at RUN SEQ` | `--evidence` | Watched variables' state at event SEQ, from recorded writes, reads and snapshots only (see below). Not on the landing screen (80×24 limit). |
@@ -108,8 +108,33 @@ Source text comes from the run's snapshot, taken at ingest and checked against S
 
 ## Timelines and execution trees
 
-- Timeline: request-tagged story events in `seq` order; internal noise collapsed (~330 events per HTTP request measured in M0 E6, so collapsing is essential).
-- Tree: `tid` ancestry with creation sites and callback names; frameless hops (e.g. `fs.readFile`'s 4 internal hops) folded.
+- Timeline: request-tagged story events in `seq` order; internal noise collapsed (~330 events per HTTP request measured in M0 E6, so collapsing is essential). A response row says which callback sent it ("sent from Timeout later").
+- Tree: creation ancestry (the execution that scheduled each resource) with creation sites and callback names; frameless hops (e.g. `fs.readFile`'s 4 internal hops) folded. A response sits under the callback that called `end()` when that callback belongs to the same request. A callback that waited on a promise settled by another request's work (or by no request's) is marked `⇠ waited on #N <callback> at <site>, settled seq S`.
+
+## Causal reconstruction (F15)
+
+Spikes and event sequences: `spikes/causal/RESULTS.md`. Tests: `tests/test_causal.py`.
+
+- **Attribution follows the creating execution.** A callback belongs to the request whose code scheduled it (the `await`, `then`, `setTimeout`). Before F15 Rewind followed trigger links, which for an `await` point at the awaited promise. So any memoised promise shared between requests (an in-flight cache fill, a single-flight call, even a plain cache hit long after it settled) put later requests' logs, writes and errors into the first request. `why` says when trigger links alone would point elsewhere (◆).
+- **What released a callback.** For a callback that resumed after `await`/`then`:
+  - ● the promise it was released by and the callback that settled it
+  - ◆ that it waited, from when, and for how long; or that the promise had already settled, so it did not wait
+  - ◆ when the settling callback belongs to another request: "waited on work started by request #N"
+  - ? "depends on request #N's shared in-flight work", hedged for errors ("may come from that request's work")
+
+  Chains through Node's internal promises: `resolve(otherPromise)`, `return p` from an async function, `Promise.all` (released by the slowest element), `Promise.race` (the winner), `events.once`, thenables.
+- **Who sent a response.** `http.end` records the first `res.end()` call. `why -r N` (or `why --seq` on an `http.out`):
+  - ● the callback and source line that called `end()`, or "Node internals" (e.g. `stream.pipe`), with the user code that started that internal work (◆)
+  - ◆ another request's code ending this response (a parked long-poll response, for example)
+  - ◆ the path from arrival to `end()`: → scheduled by, ⇠ waited until settled, … no recorded link (another request's arrival), with ms offsets. Runs of internal steps are folded, and the largest gap is named when it is at least half the time.
+- **Limits.**
+  - "Settled", never "resolved"/"rejected": `promiseResolve` fires for both and records no outcome.
+  - A listener registered by one request and invoked synchronously by another's code runs in the invoker's context. No async resource links them, so it belongs to the invoker, and Rewind can't see the registration.
+  - Only promise reactions are "released". Timers, I/O and handlers end a release chain: what started them is their creator, shown as → in the path.
+  - Runs recorded before F15 have no `http.end`: the sender is reported unknown. Attribution and release edges use fields every recording already has, so they apply to older runs too.
+  - Middleware that wraps `res.end` itself (e.g. compression) is recorded when it calls the original `end`, which may be in its own callback.
+  - Measured only on Node 24 on Windows. `for await`, async generators, `AbortSignal`, worker threads and libraries that manage async context themselves are untested.
+  - Recorder cost of `http.end` (one event per response): +3% median on the 300-request E6 load, inside the run-to-run noise (spikes/causal S5).
 
 ## Diff
 
@@ -146,7 +171,7 @@ Requires `npm install --prefix recorder` (acorn, acorn-walk, magic-string); with
 ## Supported scenarios
 
 - Node.js ≥ 20 (developed on v24.22.1), CommonJS apps, Node core `http` servers including keep-alive.
-- Timers, immediates, fs callbacks, promises and `async`/`await` chains (attribution through `await` verified in M0 E3).
+- Timers, immediates, fs callbacks, promises and `async`/`await` chains (attribution through `await` verified in M0 E3, and through promises shared between requests in F15).
 - Sync uncaught throws and unhandled rejections in Node's default `--unhandled-rejections=throw` mode.
 - Normal exit, `process.exit(n)`, crashes, SIGINT/SIGTERM; SIGKILL → partial run marked `crashed`.
 - Windows 11 inside a OneDrive folder (M0 E5b).

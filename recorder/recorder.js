@@ -147,6 +147,18 @@ if (OUT && !globalThis.__rewind) {
       em.emit = function () { return anchor.runInAsyncScope(orig, this, ...arguments); };
     }
     let finished = false;
+    // `finish` below runs in the request's scope, so it can't say which callback sent the response. The first
+    // end() call can: its eid is the calling callback, and its stack is the user code that called it (or empty,
+    // when Node internals such as stream.pipe end it). Measured cost: not detectable (spikes/causal S5).
+    const origEnd = res.end;
+    let endSeen = false;
+    res.end = function () {
+      if (!endSeen) {
+        endSeen = true;
+        guarded(() => emit('http.end', { name: `${req.method} ${req.url}`, data: { req: id }, stack: callsites() }));
+      }
+      return origEnd.apply(this, arguments);
+    };
     res.once('finish', () => { finished = true; guarded(() => emit('http.out', { name: `${res.statusCode} ${req.method} ${req.url}`,
       data: { req: id, status: res.statusCode, ms: Number(process.hrtime.bigint() - start) / 1e6 } }, res.statusCode >= 500)); });
     // connection closed before the response finished: the client gave up (or the socket died), not a stall

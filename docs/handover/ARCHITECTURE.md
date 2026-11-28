@@ -44,9 +44,9 @@ rewind/render.py (Rich) ← rewind/cli.py (Typer)  → terminal
 
 | hook | event | notes |
 |---|---|---|
-| `init(aid, type, tid, resource)` | `async.init` | `tid` (triggerAsyncId) gives the causality tree. Creation stack captured from V8 CallSites (structured, no string parsing), node internals and recorder frames stripped, max 8 user frames, paths relative to cwd. Timer/Immediate callback name from `resource._onTimeout.name`. Promise creation stacks on by default (`REWIND_PROMISE_STACKS=0` disables). |
+| `init(aid, type, tid, resource)` | `async.init` | `eid` (the execution creating the resource) gives the causality tree; `tid` (triggerAsyncId) is kept, and for a promise reaction is the promise it continues. Creation stack captured from V8 CallSites (structured, no string parsing), node internals and recorder frames stripped, max 8 user frames, paths relative to cwd. Timer/Immediate callback name from `resource._onTimeout.name`. Promise creation stacks on by default (`REWIND_PROMISE_STACKS=0` disables). |
 | `before` / `after` | `async.before` / `async.after` | when a callback actually ran |
-| `promiseResolve` | `async.resolve` | |
+| `promiseResolve` | `async.resolve` | `eid` = the callback that settled the promise (fulfilled or rejected: not distinguished). For `resolve(otherPromise)` it fires at real settlement, inside an internal reaction promise (spikes/causal S1). |
 | `destroy` | not recorded | volume, no analysis value |
 
 Every event carries `eid = executionAsyncId()` at emission — "which callback was running". Nothing is dropped at record time; filtering happens only in views.
@@ -60,9 +60,9 @@ Other recorded sources:
 ## 2. HTTP request attribution
 
 - The recorder patches `http.Server.prototype.emit` for `'request'`.
-- Each request gets its own `AsyncResource('REWIND_REQUEST')`; the handler and all `req`/`res` event callbacks run inside its scope. `http.in` is emitted as the request's anchor (`aid` of that resource); `http.out` when the response finishes (status, duration).
+- Each request gets its own `AsyncResource('REWIND_REQUEST')`; the handler and all `req`/`res` event callbacks run inside its scope. `http.in` is emitted as the request's anchor (`aid` of that resource); `http.end` at the first `res.end()` call, in the calling callback's context with its stack (F15); `http.out` when the response finishes (status, duration).
 - Why: Node's own `HTTPINCOMINGMESSAGE` resource is per *connection*, so without this, keep-alive requests on one socket are attributed to each other. Found while building the demo; regression test `test_keepalive_requests_get_distinct_anchors`.
-- Analysis: `request_of(aid)` walks `tid` links upward until the first request anchor → that request number (derived).
+- Analysis: `request_of(aid)` walks creation links (`init.eid`, `tid` where `eid` is 0) upward until the first request anchor → that request number (derived). Before F15 it walked `tid`, which moves work into another request whenever a promise is shared between requests; see [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md#causal-reconstruction-f15).
 - Not covered: `https`, `http2`, outgoing client requests as anchors, worker threads, child processes. Forked and `cluster` children inherit the preload but find no `REWIND_OUT` (the recorder deletes it from `process.env` after opening the file), so they stay inert and can't corrupt the parent's file.
 
 ## 3. Optional AST-based mutation tracking (`recorder/instrument.js`)
@@ -85,7 +85,7 @@ One JSON object per line. Fields:
 |---|---|
 | `seq` | total order within the run (contiguous) |
 | `t` | µs since recorder start |
-| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `log` `http.in` `http.out` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` |
+| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `log` `http.in` `http.end` `http.out` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` |
 | `eid` | executionAsyncId at emission |
 | `aid`, `tid` | resource id and trigger id (async events; `http.in` anchors) |
 | `type`, `name` | resource type and callback name; or log text, request line, error message, variable name |

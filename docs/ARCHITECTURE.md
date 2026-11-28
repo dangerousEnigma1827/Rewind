@@ -24,11 +24,11 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 
 | concern | mechanism |
 |---|---|
-| async causality | `init(aid, type, triggerAsyncId)` gives the tree. `before`/`after`/`promiseResolve` are recorded too. Nothing is dropped: views filter, storage never does. |
+| async causality | `init(aid, type, triggerAsyncId)` plus the `eid` of the execution creating the resource. `before`/`after`/`promiseResolve` are recorded too (`promiseResolve` carries the `eid` that settled the promise). Nothing is dropped: views filter, storage never does. |
 | where work was scheduled | creation stack from V8 CallSites (no string parsing), with node internals and the recorder removed. Promise stacks are on by default. |
 | what runs | callback name for timers and immediates (`resource._onTimeout.name`) |
 | which callback emitted an event | every event carries `eid = executionAsyncId()` |
-| requests | patched `http.Server.prototype.emit('request')`. Each request gets its own `AsyncResource('REWIND_REQUEST')`, and the handler plus all `req`/`res` event callbacks run in its scope. Node's own `HTTPINCOMINGMESSAGE` is per connection, so without this, keep-alive requests are attributed to each other. Found while building the demo; there's a regression test. |
+| requests | patched `http.Server.prototype.emit('request')`. Each request gets its own `AsyncResource('REWIND_REQUEST')`, and the handler plus all `req`/`res` event callbacks run in its scope. Node's own `HTTPINCOMINGMESSAGE` is per connection, so without this, keep-alive requests are attributed to each other. Found while building the demo; there's a regression test. The response's first `end()` call emits `http.end` with the calling callback's `eid` and stack (`finish`, behind `http.out`, runs in the request's scope and can't say who sent it). |
 | errors | `uncaughtExceptionMonitor` only, which observes without changing crash semantics. For sync throws the context is the throwing callback. For rejections it is the rejected promise, whose ancestry leads back to the caller (spikes E2/E3). `console.error(err)` produces `error.logged`. |
 | re-entrancy | one `inHook` guard wraps every recorder entry point |
 | child processes | after opening `REWIND_OUT` the recorder deletes it from `process.env`; `fork()`/`cluster` children inherit `--require recorder.js` but stay inert, so they can't truncate the parent's file |
@@ -43,7 +43,7 @@ async_hooks callbacks must be synchronous and must not create async work, or the
 |---|---|
 | `seq` | total order within the run |
 | `t` | µs since recorder start |
-| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `async.cancel` `log` `http.in` `http.out` `http.abort` `error.uncaught` `error.logged` `mutation` `mutation.capped` `read` `read.capped` `instrument` `source` `snapshot` |
+| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `async.cancel` `log` `http.in` `http.end` `http.out` `http.abort` `error.uncaught` `error.logged` `mutation` `mutation.capped` `read` `read.capped` `instrument` `source` `snapshot` |
 | `eid` | executionAsyncId at emission |
 | `aid`, `tid` | resource id and trigger id (async events; `http.in` anchors) |
 | `type`, `name` | resource type and callback name; log text, request line, error message, variable name |
@@ -71,9 +71,11 @@ need it are left out rather than computed from the wrong code. Runs ingested bef
 
 ## Analysis
 
-`analysis.Run` builds the indexes once: `inits`, `children`, `fired`, `emitted` (story events per eid), `requests` / `anchors`, plus cached `story`, `errors` and `effectful`.
+`analysis.Run` builds the indexes once: `inits`, `children` (by creating execution), `fired`, `resolves`, `emitted` (story events per eid), `requests` / `anchors` (each request with its `http.end`), plus cached `story`, `errors` and `effectful`.
 
-- **Attribution.** `request_of(aid)` walks `tid` links up to the first request anchor (derived).
+- **Attribution.** `request_of(aid)` walks **creation** links (`init.eid`, falling back to `tid` where `eid` is 0, as on accepted sockets) up to the first request anchor (derived). Until F15 it walked `tid`. For a promise reaction, `tid` is the promise it continues, so awaiting a promise another request created (a cache, a single-flight call), even one that had long settled, moved the awaiting request's work and errors into the creator's request. `trigger_request_of` keeps the old walk; `why` reports when the two disagree. On every fixture that existed before F15 the two agree on every story event (spikes/causal S2, now a regression test).
+- **Released by.** `released(aid)` / `release_chain(aid)`: for a promise reaction, the `async.resolve` of the promise it continues that precedes its run, and that resolve's `eid`, chained through Node's internal reaction promises (adoption, `Promise.all`, `events.once`) to the first context that wasn't itself released (a timer, I/O, a handler). "Waited" requires the reaction to exist before the settlement. Only promise reactions are released; timers and I/O fire on their own. `async.resolve` fires for fulfilment and rejection alike, so findings say "settled" (spikes/causal S1).
+- **Response path.** `response_path(run, req)` goes from the `http.end` context back to a request's arrival, taking the releaser where a step waited and the creator otherwise; `response_findings` words it and names the largest gap.
 - **Collapsing.** Hops with no user frame, such as the open/stat/read/close chain inside `fs.readFile`, are folded in views and kept in storage. `tree` prunes branches without story events and reports how many it hid.
 - **`investigate(run, event)`.** This is `why`. It reports:
   - throw site and running callback, with its creation site (observed)
@@ -82,6 +84,8 @@ need it are left out rather than computed from the wrong code. Runs ingested bef
   - with recorded reads: the read behind the target (observed), the last recorded write before it and whose it was (derived), "read request #N's value" (derived) or "can't explain that read" / "no read recorded" (derived, and no inference follows)
   - a race explanation (inferred, citing those seqs)
   - for an uncaught error with `--watch`: each watched value when it was thrown (observed, from the `snapshot` event whose `data.error` is that error's seq), and whether it differs from the last whole-variable write, which would mean an unrecorded write (derived)
+  - for a callback that resumed after an `await`/`then`: the settlement it waited for and where it happened (observed), that it waited and for how long, or that the promise had already settled (derived), the request the settling callback belongs to when it is another one (derived), and a dependency on that request's shared work (inferred)
+  - for a response (`http.out`, or `why -r N`): the callback that called `end()` (observed), another request's code ending it (derived), and the path from arrival to `end()` with timings (derived)
 
   Without `--watch`, it can only point out module-level names on the failing line and recommend `--watch`. It never claims a write.
 - **`state_at(run, seq)`.** This is `at`. One pass over events up to `seq` collects, per (name, file), whole-value evidence (`mutation` with path `""`, `read`, `snapshot` values), property writes, and write caps. Each variable is known (latest whole value, cited), partial (property writes after it, listed and never merged), or unknown (no evidence, or capped with no read since). A read or snapshot differing from the previous value, with no recorded write between them, derives an unseen write.

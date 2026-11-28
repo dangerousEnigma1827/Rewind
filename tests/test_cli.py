@@ -69,6 +69,17 @@ def test_why_cli(tmp_path):
     assert g.returncode == 0 and "no errors recorded" in g.stdout
 
 
+def test_why_request_explains_the_response(tmp_path):
+    rw("record", "-l", "bad", "--", "node", "demo/traffic.js", home=tmp_path)
+    w = rw("why", "bad", "-r", "2", home=tmp_path)
+    assert w.returncode == 0 and "response of request #2" in w.stdout
+    assert "res.end() was called in Timeout paymentConfirmed" in w.stdout and "path to the response" in w.stdout
+    crashed = rw("why", "bad", "-r", "3", home=tmp_path)  # #3 crashed before responding
+    assert crashed.returncode == 2 and "no recorded response" in crashed.stderr + crashed.stdout
+    assert "[bold]" not in crashed.stderr + crashed.stdout
+    assert rw("why", "bad", "-r", "9", home=tmp_path).returncode == 2
+
+
 def test_diff_cli(tmp_path):
     rw("record", "-l", "good", "--", "node", "demo/traffic.js", "--sequential", home=tmp_path)
     rw("record", "-l", "bad", "--", "node", "demo/traffic.js", home=tmp_path)

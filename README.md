@@ -79,8 +79,9 @@ first: [spikes/RESULTS.md](spikes/RESULTS.md).
 | capability | command | what you get |
 |---|---|---|
 | **Execution timeline** | `rewind timeline` | requests, logs, watched writes and errors in order, each tagged with its request; filter by request or event kind |
-| **Causal tree** | `rewind tree` | who scheduled whom, with creation sites; quiet branches pruned and internal hops folded (`--full` shows everything) |
-| **`why` analysis** | `rewind why` | for an error, or any event by `--seq`: throw site, causal chain back to the request, overlapping requests, and watched-state writes |
+| **Causal tree** | `rewind tree` | who scheduled whom, with creation sites; quiet branches pruned and internal hops folded (`--full` shows everything); callbacks that waited on another request's work are marked `⇠ waited on #N` |
+| **`why` analysis** | `rewind why` | for an error, or any event by `--seq`: throw site, causal chain back to the request, what an `await` waited on and who settled it (including another request's shared promise), overlapping requests, and watched-state writes |
+| **Response origin** | `rewind why -r N` | which callback sent request #N's response (or that another request's code did), and the path from arrival to `res.end()` with timings |
 | **Exception correlation** | `rewind why` | uncaught exceptions and unhandled promise rejections (including after `await`) tied back to the callback and request that caused them |
 | **Variable watching** | `rewind record --watch VAR` | every syntactic write to a watched top-level CommonJS variable: location, the request that made it, before/after values |
 | **Execution comparison** | `rewind diff A B` | aligns two runs and reports the first divergence, and whether a step moved (different interleaving) or is new (different code path) |
@@ -256,7 +257,7 @@ Piped or scripted (no terminal), bare `rewind` prints the landing screen instead
 | `rewind runs` | lists recorded runs, newest first |
 | `rewind timeline [RUN] [-r N] [-k KINDS] [-c] [--raw]` | the run's story; `-r` shows one request, `-k log,http,error,mutation,async,run` filters by kind, `-c` adds every user callback firing, `--raw` shows every recorded event |
 | `rewind tree [RUN] [-r N] [--full]` | the async causality tree; `-r` roots it at a request |
-| `rewind why [RUN] [-e N] [-s SEQ] [--evidence]` | investigates error N (default: the first), or any event by its seq |
+| `rewind why [RUN] [-e N] [-s SEQ] [-r N] [--evidence]` | investigates error N (default: the first), any event by its seq, or request N's response |
 | `rewind diff A B [--all] [--evidence]` | aligns two runs and finds the first divergence; `--all` includes callbacks outside any request |
 | `rewind pending [RUN] [--evidence]` | requests that never finished and the operations they waited on |
 | `rewind at RUN SEQ [--evidence]` | each watched variable at event SEQ. The value is the latest whole-value write, read or error snapshot at or before it, with its seq and who made it. It is **partial** when later property writes changed it, and **unknown** when nothing was recorded or the write cap was hit. A value is never assumed to have persisted: each one is shown "as of" the event that recorded it |
@@ -361,6 +362,9 @@ The AST dependencies load only when `--watch` is used.
   threads and child processes are not instrumented. A child started with `fork()` or `cluster` loads the recorder but
   stays inert, so only the parent is recorded and its recording stays intact.
 - Unhandled rejections are captured only in Node's default `--unhandled-rejections=throw` mode.
+- A promise's settlement is recorded without its outcome, so Rewind says "settled", not "resolved" or "rejected". A
+  listener that one request registers and another request's code calls synchronously runs as part of the caller; no
+  async link records the registration.
 - A run killed with SIGKILL loses up to its last 256 events. Error events are flushed immediately, so they survive,
   and the run is marked `crashed`.
 - Overhead: on a 300-request HTTP benchmark, recording cost about **1.9×** wall time with promise stacks (the

@@ -155,10 +155,19 @@ def tree(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, '
 def why(run: Optional[str] = typer.Argument(None, help="Run id prefix, label, 'last' or -N."),
         error: int = typer.Option(1, "--error", "-e", help="Which error to explain (1 = first)."),
         seq: Optional[int] = typer.Option(None, "--seq", "-s", help="Explain any event by its seq instead of an error."),
+        request: Optional[int] = typer.Option(None, "--request", "-r", help="Explain request #N's response: who sent it, and the path to it."),
         evidence: bool = typer.Option(False, "--evidence", help="Show the event seqs backing every finding.")):
     """Explain an error (or any event): where it ran, what caused it, and what else touched its state."""
     row, r = _load(run)
-    if seq is not None:
+    if request is not None:
+        if request not in r.requests:
+            have = ", ".join(f"#{i}" for i in r.requests) or "none"
+            render.fail(f"run has no request #{request} (has {have})"); raise typer.Exit(2)
+        out = r.requests[request].outbound
+        if out is None:
+            render.fail(f"request #{request} has no recorded response — `rewind pending` shows why"); raise typer.Exit(2)
+        target, position = out, f"response of request #{request}"
+    elif seq is not None:
         if seq not in r.by_seq:
             render.fail(f"run has no event with seq {seq}"); raise typer.Exit(2)
         target, position = r.by_seq[seq], f"event seq {seq}"
