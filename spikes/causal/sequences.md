@@ -442,7 +442,7 @@ resources (sockets, ticks, pipes) are omitted for readability; the full NDJSON i
    87 resolve PROMISE@5#21  eid=Timeout fetchPrice@5#22
    88 after   Timeout fetchPrice@5#22  eid=Timeout fetchPrice@5#22
    89 before  PROMISE@9#23  eid=PROMISE@9#23
-   90 log     'Error: upstream down\n    at Timeout.fetchPrice [as _onTimeout] (C:\\Users\\Syed Muneeb\\OneDrive\\Desktop\\code\\rewind\\spikes\\causal\\fixtures\\s3_shared_reject.js:5:86)\n    at listOnTimeout (node:internal/timers:685:17)\n    at process.processTimers (node:internal/timers:618:7)'  eid=PROMISE@9#23
+   90 log     'Error: upstream down\n    at Timeout.fetchPrice [as _onTimeout] (spikes\\causal\\fixtures\\s3_shared_reject.js:5:86)\n    at listOnTimeout (node:internal/timers:685:17)\n    at process.processTimers (node:internal/timers:618:7)'  eid=PROMISE@9#23
    91 error.logged 'upstream down'  eid=PROMISE@9#23
    95 init    Timeout resetCache@10#39  tid=PROMISE@9#23  eid=PROMISE@9#23
    97 before  REQ#1(/a)  eid=REQ#1(/a)
@@ -451,7 +451,7 @@ resources (sockets, ticks, pipes) are omitted for readability; the full NDJSON i
   100 resolve PROMISE@9#23  eid=PROMISE@9#23
   101 after   PROMISE@9#23  eid=PROMISE@9#23
   102 before  PROMISE@9#36  eid=PROMISE@9#36
-  103 log     'Error: upstream down\n    at Timeout.fetchPrice [as _onTimeout] (C:\\Users\\Syed Muneeb\\OneDrive\\Desktop\\code\\rewind\\spikes\\causal\\fixtures\\s3_shared_reject.js:5:86)\n    at listOnTimeout (node:internal/timers:685:17)\n    at process.processTimers (node:internal/timers:618:7)'  eid=PROMISE@9#36
+  103 log     'Error: upstream down\n    at Timeout.fetchPrice [as _onTimeout] (spikes\\causal\\fixtures\\s3_shared_reject.js:5:86)\n    at listOnTimeout (node:internal/timers:685:17)\n    at process.processTimers (node:internal/timers:618:7)'  eid=PROMISE@9#36
   104 error.logged 'upstream down'  eid=PROMISE@9#36
   107 before  REQ#2(/b)  eid=REQ#2(/b)
   108 after   REQ#2(/b)  eid=REQ#2(/b)

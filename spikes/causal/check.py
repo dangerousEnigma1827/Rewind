@@ -28,9 +28,18 @@ def check(sid: str, name: str, ok, detail: str = "", verdict: str | None = None)
     print(f"{v:9} {sid} {name}" + (f"  -- {detail}" if detail else ""))
 
 
+def _repo_relative(line: str) -> str:
+    """Logged error stacks carry absolute paths; the committed traces must not contain the checkout's location."""
+    root = str(lib.ROOT) + "\\"
+    for form in (root.replace("\\", "\\\\"), root, root.replace("\\", "/")):
+        line = line.replace(form, "")
+    return line
+
+
 def keep_trace(r: lib.Rec, title: str, aids=None):
     # field 2 is the resource ("PROMISE@5#31", "REQ#1(/a)", ...) for async lines; story lines are always kept
-    lines = [l for l in r.trace(aids) if not l.split()[1].startswith(("init", "before", "after", "resolve", "cancel"))
+    lines = [_repo_relative(l) for l in r.trace(aids)
+             if not l.split()[1].startswith(("init", "before", "after", "resolve", "cancel"))
              or not l.split()[2].startswith(NOISE)]
     traces.append(f"### {title}  (`{r.fixture.name}`)\n\n```\n" + "\n".join(lines) + "\n```\n")
 
