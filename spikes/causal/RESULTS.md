@@ -147,6 +147,20 @@ interleaved round-robin so drift hits every mode equally.
    `pipe` and other internal ends report "Node internals" plus the creation chain.
 5. Document S3f (synchronous emitter/listener hand-offs) as unobservable.
 
+## After F15 (re-run against the updated recorder)
+Decisions 1–5 are now implemented (`rewind/analysis.py`, `recorder/recorder.js` `http.end`, `tests/test_causal.py`).
+`check.py` still gives 38 checks: 36 PASS, 1 AMBIGUOUS, 1 LIMIT. Three things were changed so it keeps measuring
+the same thing:
+- the S2 invariant uses an explicit list of the fixtures that existed before F15, because F15 added fixtures that
+  cross requests on purpose;
+- `probe_end.js` drops recorder.js frames, because the recorder's own `res.end` wrapper now calls the probe;
+- the last S4 check now verifies that the production `http.end` matches the probe's context for every response,
+  with no recorder frames, so the probe is redundant.
+
+The story-event count in S2 rose from 197 to 260 because the count includes the new `http.end` events. Recorder
+A/B on the E6 load (HEAD vs `http.end`, 9 interleaved runs): median 1.499 s vs 1.550 s (+3.4%), min 1.312 vs 1.348
+(+2.7%). That is inside this machine's spread but not clearly zero.
+
 ## Remaining uncertainties
 - **Only measured on Windows / Node 24.** Promise-hook behaviour (adoption timing, internal reaction promises)
   is V8/Node-version specific and was not checked on Node 20/22 or Linux/macOS.

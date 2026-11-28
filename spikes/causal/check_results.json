@@ -93,7 +93,7 @@
   "spike": "S2",
   "check": "b: INVARIANT on the 17 existing fixtures + demo: both models give every story event the same request",
   "verdict": "PASS",
-  "detail": "197 story events, 0 differ"
+  "detail": "260 story events, 0 differ"
  },
  {
   "spike": "S2",
@@ -159,7 +159,7 @@
   "spike": "S3",
   "check": "d: events.once: /b released by /a's announce timer through events' internal promise",
   "verdict": "PASS",
-  "detail": "2 hops -> Timeout announce@6#31"
+  "detail": "2 hops -> Timeout announce@6#28"
  },
  {
   "spike": "S3",
@@ -223,8 +223,8 @@
  },
  {
   "spike": "S4",
-  "check": "a handler-context end() stack includes the recorder's own frames (production must filter them)",
+  "check": "production http.end: one per response, same context as the probe, no recorder frames",
   "verdict": "PASS",
-  "detail": "['<anonymous>@recorder.js:158', 'http.Server.emit@recorder.js:156']: recorder.js keepFile() already drops its own directory"
+  "detail": "6 http.end events (the probe is now redundant)"
  }
 ]

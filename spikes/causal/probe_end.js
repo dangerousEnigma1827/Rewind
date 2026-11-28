@@ -17,7 +17,9 @@ if (OUT) {
         Error.prepareStackTrace = (_, cs) => cs; Error.stackTraceLimit = 20;
         const h = {}; Error.captureStackTrace(h, end);
         const cs = h.stack; Error.prepareStackTrace = prev; Error.stackTraceLimit = lim;
-        stack = cs.filter(c => c.getFileName() && !c.getFileName().startsWith('node:') && c.getFileName() !== __filename)
+        // drop Node internals, this probe and the recorder (since F15 its own res.end wrapper calls this one)
+        stack = cs.filter(c => c.getFileName() && !c.getFileName().startsWith('node:') && c.getFileName() !== __filename
+                          && path.basename(c.getFileName()) !== 'recorder.js')
           .slice(0, 4).map(c => `${c.getFunctionName() || '<anonymous>'}@${path.basename(c.getFileName())}:${c.getLineNumber()}`);
       }
       fs.writeSync(fd, JSON.stringify({ kind: 'probe.end', url: this.req && this.req.url,

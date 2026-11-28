@@ -219,37 +219,37 @@ resources (sockets, ticks, pipes) are omitted for readability; the full NDJSON i
    88 after   Timeout fetchPrice@5#22  eid=Timeout fetchPrice@5#22
    89 before  PROMISE@9#23  eid=PROMISE@9#23
    90 log     'handler /a 10'  eid=PROMISE@9#23
-   93 init    Timeout resetCache@11#39  tid=PROMISE@9#23  eid=PROMISE@9#23
-   95 before  REQ#1(/a)  eid=REQ#1(/a)
-   96 after   REQ#1(/a)  eid=REQ#1(/a)
-   97 resolve PROMISE@8#20  eid=PROMISE@9#23
-   98 resolve PROMISE@9#23  eid=PROMISE@9#23
-   99 after   PROMISE@9#23  eid=PROMISE@9#23
-  100 before  PROMISE@9#36  eid=PROMISE@9#36
-  101 log     'handler /b 10'  eid=PROMISE@9#36
-  103 before  REQ#2(/b)  eid=REQ#2(/b)
-  104 after   REQ#2(/b)  eid=REQ#2(/b)
-  105 resolve PROMISE@8#35  eid=PROMISE@9#36
-  106 resolve PROMISE@9#36  eid=PROMISE@9#36
-  107 after   PROMISE@9#36  eid=PROMISE@9#36
-  111 before  REQ#1(/a)  eid=REQ#1(/a)
-  115 http.out '200 GET /a'  eid=REQ#1(/a)
-  116 after   REQ#1(/a)  eid=REQ#1(/a)
-  119 before  REQ#2(/b)  eid=REQ#2(/b)
-  123 http.out '200 GET /b'  eid=REQ#2(/b)
-  124 after   REQ#2(/b)  eid=REQ#2(/b)
-  127 before  REQ#1(/a)  eid=REQ#1(/a)
-  128 after   REQ#1(/a)  eid=REQ#1(/a)
-  132 before  REQ#1(/a)  eid=REQ#1(/a)
-  133 after   REQ#1(/a)  eid=REQ#1(/a)
-  136 before  REQ#2(/b)  eid=REQ#2(/b)
-  137 after   REQ#2(/b)  eid=REQ#2(/b)
-  141 before  REQ#2(/b)  eid=REQ#2(/b)
-  142 after   REQ#2(/b)  eid=REQ#2(/b)
-  145 before  REQ#1(/a)  eid=REQ#1(/a)
-  146 after   REQ#1(/a)  eid=REQ#1(/a)
-  149 before  REQ#2(/b)  eid=REQ#2(/b)
-  150 after   REQ#2(/b)  eid=REQ#2(/b)
+   94 init    Timeout resetCache@11#39  tid=PROMISE@9#23  eid=PROMISE@9#23
+   96 before  REQ#1(/a)  eid=REQ#1(/a)
+   97 after   REQ#1(/a)  eid=REQ#1(/a)
+   98 resolve PROMISE@8#20  eid=PROMISE@9#23
+   99 resolve PROMISE@9#23  eid=PROMISE@9#23
+  100 after   PROMISE@9#23  eid=PROMISE@9#23
+  101 before  PROMISE@9#36  eid=PROMISE@9#36
+  102 log     'handler /b 10'  eid=PROMISE@9#36
+  105 before  REQ#2(/b)  eid=REQ#2(/b)
+  106 after   REQ#2(/b)  eid=REQ#2(/b)
+  107 resolve PROMISE@8#35  eid=PROMISE@9#36
+  108 resolve PROMISE@9#36  eid=PROMISE@9#36
+  109 after   PROMISE@9#36  eid=PROMISE@9#36
+  113 before  REQ#1(/a)  eid=REQ#1(/a)
+  117 http.out '200 GET /a'  eid=REQ#1(/a)
+  118 after   REQ#1(/a)  eid=REQ#1(/a)
+  121 before  REQ#2(/b)  eid=REQ#2(/b)
+  125 http.out '200 GET /b'  eid=REQ#2(/b)
+  126 after   REQ#2(/b)  eid=REQ#2(/b)
+  129 before  REQ#1(/a)  eid=REQ#1(/a)
+  130 after   REQ#1(/a)  eid=REQ#1(/a)
+  134 before  REQ#1(/a)  eid=REQ#1(/a)
+  135 after   REQ#1(/a)  eid=REQ#1(/a)
+  138 before  REQ#2(/b)  eid=REQ#2(/b)
+  139 after   REQ#2(/b)  eid=REQ#2(/b)
+  143 before  REQ#2(/b)  eid=REQ#2(/b)
+  144 after   REQ#2(/b)  eid=REQ#2(/b)
+  147 before  REQ#1(/a)  eid=REQ#1(/a)
+  148 after   REQ#1(/a)  eid=REQ#1(/a)
+  151 before  REQ#2(/b)  eid=REQ#2(/b)
+  152 after   REQ#2(/b)  eid=REQ#2(/b)
 ```
 
 ### S3b cache hit on an already-settled promise  (`s3_settled_cache.js`)
@@ -268,43 +268,43 @@ resources (sockets, ticks, pipes) are omitted for readability; the full NDJSON i
    52 after   Timeout fetchPrice@5#22  eid=Timeout fetchPrice@5#22
    53 before  PROMISE@9#23  eid=PROMISE@9#23
    54 log     'handler /a 10'  eid=PROMISE@9#23
-   57 init    Timeout resetCache@11#26  tid=PROMISE@9#23  eid=PROMISE@9#23
-   59 before  REQ#1(/a)  eid=REQ#1(/a)
-   60 after   REQ#1(/a)  eid=REQ#1(/a)
-   61 resolve PROMISE@8#20  eid=PROMISE@9#23
-   62 resolve PROMISE@9#23  eid=PROMISE@9#23
-   63 after   PROMISE@9#23  eid=PROMISE@9#23
-   67 before  REQ#1(/a)  eid=REQ#1(/a)
-   71 http.out '200 GET /a'  eid=REQ#1(/a)
-   72 after   REQ#1(/a)  eid=REQ#1(/a)
-   75 before  REQ#1(/a)  eid=REQ#1(/a)
-   76 after   REQ#1(/a)  eid=REQ#1(/a)
-   80 before  REQ#1(/a)  eid=REQ#1(/a)
-   81 after   REQ#1(/a)  eid=REQ#1(/a)
-   84 before  REQ#1(/a)  eid=REQ#1(/a)
-   85 after   REQ#1(/a)  eid=REQ#1(/a)
-  128 init    REQ#2(/b)  tid=HTTPINCOMINGMESSAGE#17  eid=HTTPINCOMINGMESSAGE#17
-  129 before  REQ#2(/b)  eid=REQ#2(/b)
-  130 http.in 'GET /b'  eid=REQ#2(/b)
-  131 init    PROMISE@8#44  tid=REQ#2(/b)  eid=REQ#2(/b)
-  132 init    PROMISE@9#45  tid=PROMISE@5#21  eid=REQ#2(/b)
-  133 after   REQ#2(/b)  eid=REQ#2(/b)
-  139 before  PROMISE@9#45  eid=PROMISE@9#45
-  140 log     'handler /b 10'  eid=PROMISE@9#45
-  143 before  REQ#2(/b)  eid=REQ#2(/b)
-  144 after   REQ#2(/b)  eid=REQ#2(/b)
-  145 resolve PROMISE@8#44  eid=PROMISE@9#45
-  146 resolve PROMISE@9#45  eid=PROMISE@9#45
-  147 after   PROMISE@9#45  eid=PROMISE@9#45
-  151 before  REQ#2(/b)  eid=REQ#2(/b)
-  156 http.out '200 GET /b'  eid=REQ#2(/b)
-  157 after   REQ#2(/b)  eid=REQ#2(/b)
-  160 before  REQ#2(/b)  eid=REQ#2(/b)
-  161 after   REQ#2(/b)  eid=REQ#2(/b)
-  165 before  REQ#2(/b)  eid=REQ#2(/b)
-  166 after   REQ#2(/b)  eid=REQ#2(/b)
-  169 before  REQ#2(/b)  eid=REQ#2(/b)
-  170 after   REQ#2(/b)  eid=REQ#2(/b)
+   58 init    Timeout resetCache@11#26  tid=PROMISE@9#23  eid=PROMISE@9#23
+   60 before  REQ#1(/a)  eid=REQ#1(/a)
+   61 after   REQ#1(/a)  eid=REQ#1(/a)
+   62 resolve PROMISE@8#20  eid=PROMISE@9#23
+   63 resolve PROMISE@9#23  eid=PROMISE@9#23
+   64 after   PROMISE@9#23  eid=PROMISE@9#23
+   68 before  REQ#1(/a)  eid=REQ#1(/a)
+   72 http.out '200 GET /a'  eid=REQ#1(/a)
+   73 after   REQ#1(/a)  eid=REQ#1(/a)
+   76 before  REQ#1(/a)  eid=REQ#1(/a)
+   77 after   REQ#1(/a)  eid=REQ#1(/a)
+   81 before  REQ#1(/a)  eid=REQ#1(/a)
+   82 after   REQ#1(/a)  eid=REQ#1(/a)
+   85 before  REQ#1(/a)  eid=REQ#1(/a)
+   86 after   REQ#1(/a)  eid=REQ#1(/a)
+  129 init    REQ#2(/b)  tid=HTTPINCOMINGMESSAGE#17  eid=HTTPINCOMINGMESSAGE#17
+  130 before  REQ#2(/b)  eid=REQ#2(/b)
+  131 http.in 'GET /b'  eid=REQ#2(/b)
+  132 init    PROMISE@8#44  tid=REQ#2(/b)  eid=REQ#2(/b)
+  133 init    PROMISE@9#45  tid=PROMISE@5#21  eid=REQ#2(/b)
+  134 after   REQ#2(/b)  eid=REQ#2(/b)
+  140 before  PROMISE@9#45  eid=PROMISE@9#45
+  141 log     'handler /b 10'  eid=PROMISE@9#45
+  145 before  REQ#2(/b)  eid=REQ#2(/b)
+  146 after   REQ#2(/b)  eid=REQ#2(/b)
+  147 resolve PROMISE@8#44  eid=PROMISE@9#45
+  148 resolve PROMISE@9#45  eid=PROMISE@9#45
+  149 after   PROMISE@9#45  eid=PROMISE@9#45
+  153 before  REQ#2(/b)  eid=REQ#2(/b)
+  158 http.out '200 GET /b'  eid=REQ#2(/b)
+  159 after   REQ#2(/b)  eid=REQ#2(/b)
+  162 before  REQ#2(/b)  eid=REQ#2(/b)
+  163 after   REQ#2(/b)  eid=REQ#2(/b)
+  167 before  REQ#2(/b)  eid=REQ#2(/b)
+  168 after   REQ#2(/b)  eid=REQ#2(/b)
+  171 before  REQ#2(/b)  eid=REQ#2(/b)
+  172 after   REQ#2(/b)  eid=REQ#2(/b)
 ```
 
 ### S3c mutex with a resolver queue  (`s3_mutex.js`)
@@ -333,51 +333,51 @@ resources (sockets, ticks, pipes) are omitted for readability; the full NDJSON i
    91 after   REQ#2(/b)  eid=REQ#2(/b)
    97 before  Timeout work@12#35  eid=Timeout work@12#35
    98 resolve PROMISE@6#38  eid=Timeout work@12#35
-   99 init    Timeout resetCache@12#40  tid=Timeout work@12#35  eid=Timeout work@12#35
-  101 before  REQ#1(/a)  eid=REQ#1(/a)
-  102 after   REQ#1(/a)  eid=REQ#1(/a)
-  103 after   Timeout work@12#35  eid=Timeout work@12#35
-  105 before  REQ#1(/a)  eid=REQ#1(/a)
-  109 http.out '200 GET /a'  eid=REQ#1(/a)
-  110 after   REQ#1(/a)  eid=REQ#1(/a)
-  113 before  REQ#1(/a)  eid=REQ#1(/a)
-  114 after   REQ#1(/a)  eid=REQ#1(/a)
-  118 before  REQ#1(/a)  eid=REQ#1(/a)
-  119 after   REQ#1(/a)  eid=REQ#1(/a)
-  122 before  REQ#1(/a)  eid=REQ#1(/a)
-  123 after   REQ#1(/a)  eid=REQ#1(/a)
-  125 before  PROMISE@10#39  eid=PROMISE@10#39
-  126 log     'in critical section /b'  eid=PROMISE@10#39
-  128 init    Timeout work@12#47  tid=PROMISE@10#39  eid=PROMISE@10#39
-  129 resolve PROMISE@9#37  eid=PROMISE@10#39
-  130 resolve PROMISE@10#39  eid=PROMISE@10#39
-  131 after   PROMISE@10#39  eid=PROMISE@10#39
-  163 before  Timeout work@12#47  eid=Timeout work@12#47
-  165 before  REQ#2(/b)  eid=REQ#2(/b)
-  166 after   REQ#2(/b)  eid=REQ#2(/b)
-  167 after   Timeout work@12#47  eid=Timeout work@12#47
-  169 before  REQ#2(/b)  eid=REQ#2(/b)
-  173 http.out '200 GET /b'  eid=REQ#2(/b)
-  174 after   REQ#2(/b)  eid=REQ#2(/b)
-  177 before  REQ#2(/b)  eid=REQ#2(/b)
-  178 after   REQ#2(/b)  eid=REQ#2(/b)
-  182 before  REQ#2(/b)  eid=REQ#2(/b)
-  183 after   REQ#2(/b)  eid=REQ#2(/b)
-  186 before  REQ#2(/b)  eid=REQ#2(/b)
-  187 after   REQ#2(/b)  eid=REQ#2(/b)
+  100 init    Timeout resetCache@12#40  tid=Timeout work@12#35  eid=Timeout work@12#35
+  102 before  REQ#1(/a)  eid=REQ#1(/a)
+  103 after   REQ#1(/a)  eid=REQ#1(/a)
+  104 after   Timeout work@12#35  eid=Timeout work@12#35
+  106 before  REQ#1(/a)  eid=REQ#1(/a)
+  110 http.out '200 GET /a'  eid=REQ#1(/a)
+  111 after   REQ#1(/a)  eid=REQ#1(/a)
+  114 before  REQ#1(/a)  eid=REQ#1(/a)
+  115 after   REQ#1(/a)  eid=REQ#1(/a)
+  119 before  REQ#1(/a)  eid=REQ#1(/a)
+  120 after   REQ#1(/a)  eid=REQ#1(/a)
+  123 before  REQ#1(/a)  eid=REQ#1(/a)
+  124 after   REQ#1(/a)  eid=REQ#1(/a)
+  126 before  PROMISE@10#39  eid=PROMISE@10#39
+  127 log     'in critical section /b'  eid=PROMISE@10#39
+  129 init    Timeout work@12#47  tid=PROMISE@10#39  eid=PROMISE@10#39
+  130 resolve PROMISE@9#37  eid=PROMISE@10#39
+  131 resolve PROMISE@10#39  eid=PROMISE@10#39
+  132 after   PROMISE@10#39  eid=PROMISE@10#39
+  164 before  Timeout work@12#47  eid=Timeout work@12#47
+  167 before  REQ#2(/b)  eid=REQ#2(/b)
+  168 after   REQ#2(/b)  eid=REQ#2(/b)
+  169 after   Timeout work@12#47  eid=Timeout work@12#47
+  171 before  REQ#2(/b)  eid=REQ#2(/b)
+  175 http.out '200 GET /b'  eid=REQ#2(/b)
+  176 after   REQ#2(/b)  eid=REQ#2(/b)
+  179 before  REQ#2(/b)  eid=REQ#2(/b)
+  180 after   REQ#2(/b)  eid=REQ#2(/b)
+  184 before  REQ#2(/b)  eid=REQ#2(/b)
+  185 after   REQ#2(/b)  eid=REQ#2(/b)
+  188 before  REQ#2(/b)  eid=REQ#2(/b)
+  189 after   REQ#2(/b)  eid=REQ#2(/b)
 ```
 
 ### S3d events.once across requests  (`s3_once.js`)
 
 ```
-   61 init    REQ#1(/a)  tid=HTTPINCOMINGMESSAGE#24  eid=HTTPINCOMINGMESSAGE#24
-   62 before  REQ#1(/a)  eid=REQ#1(/a)
-   63 http.in 'GET /a'  eid=REQ#1(/a)
-   64 init    PROMISE@4#30  tid=REQ#1(/a)  eid=REQ#1(/a)
-   65 init    Timeout announce@6#31  tid=REQ#1(/a)  eid=REQ#1(/a)
-   66 resolve PROMISE@4#30  eid=REQ#1(/a)
-   67 after   REQ#1(/a)  eid=REQ#1(/a)
-   74 init    REQ#2(/b)  tid=HTTPINCOMINGMESSAGE#27  eid=HTTPINCOMINGMESSAGE#27
+   52 init    REQ#1(/a)  tid=HTTPINCOMINGMESSAGE#17  eid=HTTPINCOMINGMESSAGE#17
+   53 before  REQ#1(/a)  eid=REQ#1(/a)
+   54 http.in 'GET /a'  eid=REQ#1(/a)
+   55 init    PROMISE@4#27  tid=REQ#1(/a)  eid=REQ#1(/a)
+   56 init    Timeout announce@6#28  tid=REQ#1(/a)  eid=REQ#1(/a)
+   57 resolve PROMISE@4#27  eid=REQ#1(/a)
+   58 after   REQ#1(/a)  eid=REQ#1(/a)
+   74 init    REQ#2(/b)  tid=HTTPINCOMINGMESSAGE#30  eid=HTTPINCOMINGMESSAGE#30
    75 before  REQ#2(/b)  eid=REQ#2(/b)
    76 http.in 'GET /b'  eid=REQ#2(/b)
    77 init    PROMISE@4#33  tid=REQ#2(/b)  eid=REQ#2(/b)
@@ -387,135 +387,135 @@ resources (sockets, ticks, pipes) are omitted for readability; the full NDJSON i
    81 after   REQ#2(/b)  eid=REQ#2(/b)
    87 before  PROMISE@5#34  eid=PROMISE@5#34
    89 after   PROMISE@5#34  eid=PROMISE@5#34
-   90 before  Timeout announce@6#31  eid=Timeout announce@6#31
-   91 resolve PROMISE@5#35  eid=Timeout announce@6#31
-   92 init    Timeout resetCache@6#38  tid=Timeout announce@6#31  eid=Timeout announce@6#31
-   94 before  REQ#1(/a)  eid=REQ#1(/a)
-   95 after   REQ#1(/a)  eid=REQ#1(/a)
-   96 after   Timeout announce@6#31  eid=Timeout announce@6#31
-   98 before  REQ#1(/a)  eid=REQ#1(/a)
-  102 http.out '200 GET /a'  eid=REQ#1(/a)
-  103 after   REQ#1(/a)  eid=REQ#1(/a)
-  106 before  REQ#1(/a)  eid=REQ#1(/a)
-  107 after   REQ#1(/a)  eid=REQ#1(/a)
-  111 before  REQ#1(/a)  eid=REQ#1(/a)
-  112 after   REQ#1(/a)  eid=REQ#1(/a)
-  115 before  REQ#1(/a)  eid=REQ#1(/a)
-  116 after   REQ#1(/a)  eid=REQ#1(/a)
-  119 resolve PROMISE@5#34  eid=PROMISE#37
-  122 before  PROMISE@5#36  eid=PROMISE@5#36
-  123 log     'b saw ready'  eid=PROMISE@5#36
-  127 before  REQ#2(/b)  eid=REQ#2(/b)
-  128 after   REQ#2(/b)  eid=REQ#2(/b)
-  129 resolve PROMISE@4#33  eid=PROMISE@5#36
-  130 resolve PROMISE@5#36  eid=PROMISE@5#36
-  131 after   PROMISE@5#36  eid=PROMISE@5#36
-  135 before  REQ#2(/b)  eid=REQ#2(/b)
-  139 http.out '200 GET /b'  eid=REQ#2(/b)
-  140 after   REQ#2(/b)  eid=REQ#2(/b)
-  143 before  REQ#2(/b)  eid=REQ#2(/b)
-  144 after   REQ#2(/b)  eid=REQ#2(/b)
-  148 before  REQ#2(/b)  eid=REQ#2(/b)
-  149 after   REQ#2(/b)  eid=REQ#2(/b)
-  152 before  REQ#2(/b)  eid=REQ#2(/b)
-  153 after   REQ#2(/b)  eid=REQ#2(/b)
+   90 before  Timeout announce@6#28  eid=Timeout announce@6#28
+   91 resolve PROMISE@5#35  eid=Timeout announce@6#28
+   93 init    Timeout resetCache@6#38  tid=Timeout announce@6#28  eid=Timeout announce@6#28
+   95 before  REQ#1(/a)  eid=REQ#1(/a)
+   96 after   REQ#1(/a)  eid=REQ#1(/a)
+   97 after   Timeout announce@6#28  eid=Timeout announce@6#28
+   99 before  REQ#1(/a)  eid=REQ#1(/a)
+  103 http.out '200 GET /a'  eid=REQ#1(/a)
+  104 after   REQ#1(/a)  eid=REQ#1(/a)
+  107 before  REQ#1(/a)  eid=REQ#1(/a)
+  108 after   REQ#1(/a)  eid=REQ#1(/a)
+  112 before  REQ#1(/a)  eid=REQ#1(/a)
+  113 after   REQ#1(/a)  eid=REQ#1(/a)
+  116 before  REQ#1(/a)  eid=REQ#1(/a)
+  117 after   REQ#1(/a)  eid=REQ#1(/a)
+  120 resolve PROMISE@5#34  eid=PROMISE#37
+  123 before  PROMISE@5#36  eid=PROMISE@5#36
+  124 log     'b saw ready'  eid=PROMISE@5#36
+  129 before  REQ#2(/b)  eid=REQ#2(/b)
+  130 after   REQ#2(/b)  eid=REQ#2(/b)
+  131 resolve PROMISE@4#33  eid=PROMISE@5#36
+  132 resolve PROMISE@5#36  eid=PROMISE@5#36
+  133 after   PROMISE@5#36  eid=PROMISE@5#36
+  137 before  REQ#2(/b)  eid=REQ#2(/b)
+  141 http.out '200 GET /b'  eid=REQ#2(/b)
+  142 after   REQ#2(/b)  eid=REQ#2(/b)
+  145 before  REQ#2(/b)  eid=REQ#2(/b)
+  146 after   REQ#2(/b)  eid=REQ#2(/b)
+  150 before  REQ#2(/b)  eid=REQ#2(/b)
+  151 after   REQ#2(/b)  eid=REQ#2(/b)
+  154 before  REQ#2(/b)  eid=REQ#2(/b)
+  155 after   REQ#2(/b)  eid=REQ#2(/b)
 ```
 
 ### S3e shared promise rejects  (`s3_shared_reject.js`)
 
 ```
-   52 init    REQ#1(/a)  tid=HTTPINCOMINGMESSAGE#17  eid=HTTPINCOMINGMESSAGE#17
-   53 before  REQ#1(/a)  eid=REQ#1(/a)
-   54 http.in 'GET /a'  eid=REQ#1(/a)
-   55 init    PROMISE@8#27  tid=REQ#1(/a)  eid=REQ#1(/a)
-   56 init    PROMISE@5#28  tid=REQ#1(/a)  eid=REQ#1(/a)
-   57 init    Timeout fetchPrice@5#29  tid=REQ#1(/a)  eid=REQ#1(/a)
-   58 init    PROMISE@9#30  tid=PROMISE@5#28  eid=REQ#1(/a)
-   59 after   REQ#1(/a)  eid=REQ#1(/a)
+   37 init    REQ#1(/a)  tid=HTTPINCOMINGMESSAGE#17  eid=HTTPINCOMINGMESSAGE#17
+   38 before  REQ#1(/a)  eid=REQ#1(/a)
+   39 http.in 'GET /a'  eid=REQ#1(/a)
+   40 init    PROMISE@8#20  tid=REQ#1(/a)  eid=REQ#1(/a)
+   41 init    PROMISE@5#21  tid=REQ#1(/a)  eid=REQ#1(/a)
+   42 init    Timeout fetchPrice@5#22  tid=REQ#1(/a)  eid=REQ#1(/a)
+   43 init    PROMISE@9#23  tid=PROMISE@5#21  eid=REQ#1(/a)
+   44 after   REQ#1(/a)  eid=REQ#1(/a)
    75 init    REQ#2(/b)  tid=HTTPINCOMINGMESSAGE#32  eid=HTTPINCOMINGMESSAGE#32
    76 before  REQ#2(/b)  eid=REQ#2(/b)
    77 http.in 'GET /b'  eid=REQ#2(/b)
    78 init    PROMISE@8#35  tid=REQ#2(/b)  eid=REQ#2(/b)
-   79 init    PROMISE@9#36  tid=PROMISE@5#28  eid=REQ#2(/b)
+   79 init    PROMISE@9#36  tid=PROMISE@5#21  eid=REQ#2(/b)
    80 after   REQ#2(/b)  eid=REQ#2(/b)
-   86 before  Timeout fetchPrice@5#29  eid=Timeout fetchPrice@5#29
-   87 resolve PROMISE@5#28  eid=Timeout fetchPrice@5#29
-   88 after   Timeout fetchPrice@5#29  eid=Timeout fetchPrice@5#29
-   89 before  PROMISE@9#30  eid=PROMISE@9#30
-   90 log     'Error: upstream down\n    at Timeout.fetchPrice [as _onTimeout] (C:\\Users\\Syed Muneeb\\OneDrive\\Desktop\\code\\rewind\\spikes\\causal\\fixtures\\s3_shared_reject.js:5:86)\n    at listOnTimeout (node:internal/timers:685:17)\n    at process.processTimers (node:internal/timers:618:7)'  eid=PROMISE@9#30
-   91 error.logged 'upstream down'  eid=PROMISE@9#30
-   94 init    Timeout resetCache@10#39  tid=PROMISE@9#30  eid=PROMISE@9#30
-   96 before  REQ#1(/a)  eid=REQ#1(/a)
-   97 after   REQ#1(/a)  eid=REQ#1(/a)
-   98 resolve PROMISE@8#27  eid=PROMISE@9#30
-   99 resolve PROMISE@9#30  eid=PROMISE@9#30
-  100 after   PROMISE@9#30  eid=PROMISE@9#30
-  101 before  PROMISE@9#36  eid=PROMISE@9#36
-  102 log     'Error: upstream down\n    at Timeout.fetchPrice [as _onTimeout] (C:\\Users\\Syed Muneeb\\OneDrive\\Desktop\\code\\rewind\\spikes\\causal\\fixtures\\s3_shared_reject.js:5:86)\n    at listOnTimeout (node:internal/timers:685:17)\n    at process.processTimers (node:internal/timers:618:7)'  eid=PROMISE@9#36
-  103 error.logged 'upstream down'  eid=PROMISE@9#36
-  105 before  REQ#2(/b)  eid=REQ#2(/b)
-  106 after   REQ#2(/b)  eid=REQ#2(/b)
-  107 resolve PROMISE@8#35  eid=PROMISE@9#36
-  108 resolve PROMISE@9#36  eid=PROMISE@9#36
-  109 after   PROMISE@9#36  eid=PROMISE@9#36
-  113 before  REQ#1(/a)  eid=REQ#1(/a)
-  117 http.out '500 GET /a'  eid=REQ#1(/a)
-  118 after   REQ#1(/a)  eid=REQ#1(/a)
-  121 before  REQ#2(/b)  eid=REQ#2(/b)
-  125 http.out '500 GET /b'  eid=REQ#2(/b)
-  126 after   REQ#2(/b)  eid=REQ#2(/b)
-  129 before  REQ#1(/a)  eid=REQ#1(/a)
-  130 after   REQ#1(/a)  eid=REQ#1(/a)
-  134 before  REQ#1(/a)  eid=REQ#1(/a)
-  135 after   REQ#1(/a)  eid=REQ#1(/a)
-  138 before  REQ#2(/b)  eid=REQ#2(/b)
-  139 after   REQ#2(/b)  eid=REQ#2(/b)
-  143 before  REQ#2(/b)  eid=REQ#2(/b)
-  144 after   REQ#2(/b)  eid=REQ#2(/b)
-  147 before  REQ#1(/a)  eid=REQ#1(/a)
-  148 after   REQ#1(/a)  eid=REQ#1(/a)
-  151 before  REQ#2(/b)  eid=REQ#2(/b)
-  152 after   REQ#2(/b)  eid=REQ#2(/b)
+   86 before  Timeout fetchPrice@5#22  eid=Timeout fetchPrice@5#22
+   87 resolve PROMISE@5#21  eid=Timeout fetchPrice@5#22
+   88 after   Timeout fetchPrice@5#22  eid=Timeout fetchPrice@5#22
+   89 before  PROMISE@9#23  eid=PROMISE@9#23
+   90 log     'Error: upstream down\n    at Timeout.fetchPrice [as _onTimeout] (C:\\Users\\Syed Muneeb\\OneDrive\\Desktop\\code\\rewind\\spikes\\causal\\fixtures\\s3_shared_reject.js:5:86)\n    at listOnTimeout (node:internal/timers:685:17)\n    at process.processTimers (node:internal/timers:618:7)'  eid=PROMISE@9#23
+   91 error.logged 'upstream down'  eid=PROMISE@9#23
+   95 init    Timeout resetCache@10#39  tid=PROMISE@9#23  eid=PROMISE@9#23
+   97 before  REQ#1(/a)  eid=REQ#1(/a)
+   98 after   REQ#1(/a)  eid=REQ#1(/a)
+   99 resolve PROMISE@8#20  eid=PROMISE@9#23
+  100 resolve PROMISE@9#23  eid=PROMISE@9#23
+  101 after   PROMISE@9#23  eid=PROMISE@9#23
+  102 before  PROMISE@9#36  eid=PROMISE@9#36
+  103 log     'Error: upstream down\n    at Timeout.fetchPrice [as _onTimeout] (C:\\Users\\Syed Muneeb\\OneDrive\\Desktop\\code\\rewind\\spikes\\causal\\fixtures\\s3_shared_reject.js:5:86)\n    at listOnTimeout (node:internal/timers:685:17)\n    at process.processTimers (node:internal/timers:618:7)'  eid=PROMISE@9#36
+  104 error.logged 'upstream down'  eid=PROMISE@9#36
+  107 before  REQ#2(/b)  eid=REQ#2(/b)
+  108 after   REQ#2(/b)  eid=REQ#2(/b)
+  109 resolve PROMISE@8#35  eid=PROMISE@9#36
+  110 resolve PROMISE@9#36  eid=PROMISE@9#36
+  111 after   PROMISE@9#36  eid=PROMISE@9#36
+  115 before  REQ#1(/a)  eid=REQ#1(/a)
+  119 http.out '500 GET /a'  eid=REQ#1(/a)
+  120 after   REQ#1(/a)  eid=REQ#1(/a)
+  123 before  REQ#2(/b)  eid=REQ#2(/b)
+  127 http.out '500 GET /b'  eid=REQ#2(/b)
+  128 after   REQ#2(/b)  eid=REQ#2(/b)
+  131 before  REQ#1(/a)  eid=REQ#1(/a)
+  132 after   REQ#1(/a)  eid=REQ#1(/a)
+  136 before  REQ#1(/a)  eid=REQ#1(/a)
+  137 after   REQ#1(/a)  eid=REQ#1(/a)
+  140 before  REQ#2(/b)  eid=REQ#2(/b)
+  141 after   REQ#2(/b)  eid=REQ#2(/b)
+  145 before  REQ#2(/b)  eid=REQ#2(/b)
+  146 after   REQ#2(/b)  eid=REQ#2(/b)
+  149 before  REQ#1(/a)  eid=REQ#1(/a)
+  150 after   REQ#1(/a)  eid=REQ#1(/a)
+  153 before  REQ#2(/b)  eid=REQ#2(/b)
+  154 after   REQ#2(/b)  eid=REQ#2(/b)
 ```
 
 ### S3f listener registered by /b, emitted synchronously by /a  (`s3_sync_listener.js`)
 
 ```
-   61 init    REQ#1(/b)  tid=HTTPINCOMINGMESSAGE#24  eid=HTTPINCOMINGMESSAGE#24
-   62 before  REQ#1(/b)  eid=REQ#1(/b)
-   63 http.in 'GET /b'  eid=REQ#1(/b)
-   64 init    Timeout resetCache@5#30  tid=REQ#1(/b)  eid=REQ#1(/b)
-   66 before  REQ#1(/b)  eid=REQ#1(/b)
-   67 after   REQ#1(/b)  eid=REQ#1(/b)
-   68 after   REQ#1(/b)  eid=REQ#1(/b)
+   52 init    REQ#1(/b)  tid=HTTPINCOMINGMESSAGE#17  eid=HTTPINCOMINGMESSAGE#17
+   53 before  REQ#1(/b)  eid=REQ#1(/b)
+   54 http.in 'GET /b'  eid=REQ#1(/b)
+   56 init    Timeout resetCache@5#27  tid=REQ#1(/b)  eid=REQ#1(/b)
+   58 before  REQ#1(/b)  eid=REQ#1(/b)
+   59 after   REQ#1(/b)  eid=REQ#1(/b)
+   60 after   REQ#1(/b)  eid=REQ#1(/b)
+   67 before  REQ#1(/b)  eid=REQ#1(/b)
+   71 http.out '200 GET /b'  eid=REQ#1(/b)
+   72 after   REQ#1(/b)  eid=REQ#1(/b)
    75 before  REQ#1(/b)  eid=REQ#1(/b)
-   79 http.out '200 GET /b'  eid=REQ#1(/b)
-   80 after   REQ#1(/b)  eid=REQ#1(/b)
-   83 before  REQ#1(/b)  eid=REQ#1(/b)
-   84 after   REQ#1(/b)  eid=REQ#1(/b)
-   88 before  REQ#1(/b)  eid=REQ#1(/b)
-   89 after   REQ#1(/b)  eid=REQ#1(/b)
-   92 before  REQ#1(/b)  eid=REQ#1(/b)
-   93 after   REQ#1(/b)  eid=REQ#1(/b)
-   96 init    REQ#2(/a)  tid=HTTPINCOMINGMESSAGE#27  eid=HTTPINCOMINGMESSAGE#27
-   97 before  REQ#2(/a)  eid=REQ#2(/a)
-   98 http.in 'GET /a'  eid=REQ#2(/a)
-   99 init    Timeout emitter@6#37  tid=REQ#2(/a)  eid=REQ#2(/a)
-  100 after   REQ#2(/a)  eid=REQ#2(/a)
-  135 before  Timeout emitter@6#37  eid=Timeout emitter@6#37
-  136 log     'b listener ran'  eid=Timeout emitter@6#37
-  140 before  REQ#2(/a)  eid=REQ#2(/a)
-  141 after   REQ#2(/a)  eid=REQ#2(/a)
-  142 after   Timeout emitter@6#37  eid=Timeout emitter@6#37
-  146 before  REQ#2(/a)  eid=REQ#2(/a)
-  150 http.out '200 GET /a'  eid=REQ#2(/a)
-  151 after   REQ#2(/a)  eid=REQ#2(/a)
-  154 before  REQ#2(/a)  eid=REQ#2(/a)
-  155 after   REQ#2(/a)  eid=REQ#2(/a)
-  159 before  REQ#2(/a)  eid=REQ#2(/a)
-  160 after   REQ#2(/a)  eid=REQ#2(/a)
-  163 before  REQ#2(/a)  eid=REQ#2(/a)
-  164 after   REQ#2(/a)  eid=REQ#2(/a)
+   76 after   REQ#1(/b)  eid=REQ#1(/b)
+   80 before  REQ#1(/b)  eid=REQ#1(/b)
+   81 after   REQ#1(/b)  eid=REQ#1(/b)
+   84 before  REQ#1(/b)  eid=REQ#1(/b)
+   85 after   REQ#1(/b)  eid=REQ#1(/b)
+  126 init    REQ#2(/a)  tid=HTTPINCOMINGMESSAGE#34  eid=HTTPINCOMINGMESSAGE#34
+  127 before  REQ#2(/a)  eid=REQ#2(/a)
+  128 http.in 'GET /a'  eid=REQ#2(/a)
+  129 init    Timeout emitter@6#44  tid=REQ#2(/a)  eid=REQ#2(/a)
+  130 after   REQ#2(/a)  eid=REQ#2(/a)
+  136 before  Timeout emitter@6#44  eid=Timeout emitter@6#44
+  137 log     'b listener ran'  eid=Timeout emitter@6#44
+  142 before  REQ#2(/a)  eid=REQ#2(/a)
+  143 after   REQ#2(/a)  eid=REQ#2(/a)
+  144 after   Timeout emitter@6#44  eid=Timeout emitter@6#44
+  148 before  REQ#2(/a)  eid=REQ#2(/a)
+  152 http.out '200 GET /a'  eid=REQ#2(/a)
+  153 after   REQ#2(/a)  eid=REQ#2(/a)
+  156 before  REQ#2(/a)  eid=REQ#2(/a)
+  157 after   REQ#2(/a)  eid=REQ#2(/a)
+  161 before  REQ#2(/a)  eid=REQ#2(/a)
+  162 after   REQ#2(/a)  eid=REQ#2(/a)
+  165 before  REQ#2(/a)  eid=REQ#2(/a)
+  166 after   REQ#2(/a)  eid=REQ#2(/a)
 ```
 
 ### S4 res.end call sites  (`s4_end.js`)
@@ -525,119 +525,119 @@ resources (sockets, ticks, pipes) are omitted for readability; the full NDJSON i
   154 before  REQ#1(/direct)  eid=REQ#1(/direct)
   155 http.in 'GET /direct'  eid=REQ#1(/direct)
   156 init    PROMISE@4#71  tid=REQ#1(/direct)  eid=REQ#1(/direct)
-  157 init    Timeout resetCache@6#72  tid=REQ#1(/direct)  eid=REQ#1(/direct)
-  159 before  REQ#1(/direct)  eid=REQ#1(/direct)
-  160 after   REQ#1(/direct)  eid=REQ#1(/direct)
-  161 resolve PROMISE@4#71  eid=REQ#1(/direct)
-  162 after   REQ#1(/direct)  eid=REQ#1(/direct)
-  169 before  REQ#1(/direct)  eid=REQ#1(/direct)
-  173 http.out '200 GET /direct'  eid=REQ#1(/direct)
-  174 after   REQ#1(/direct)  eid=REQ#1(/direct)
-  177 before  REQ#1(/direct)  eid=REQ#1(/direct)
-  178 after   REQ#1(/direct)  eid=REQ#1(/direct)
-  182 before  REQ#1(/direct)  eid=REQ#1(/direct)
-  183 after   REQ#1(/direct)  eid=REQ#1(/direct)
-  186 before  REQ#1(/direct)  eid=REQ#1(/direct)
-  187 after   REQ#1(/direct)  eid=REQ#1(/direct)
-  190 init    REQ#2(/await)  tid=HTTPINCOMINGMESSAGE#52  eid=HTTPINCOMINGMESSAGE#52
-  191 before  REQ#2(/await)  eid=REQ#2(/await)
-  192 http.in 'GET /await'  eid=REQ#2(/await)
-  193 init    PROMISE@4#79  tid=REQ#2(/await)  eid=REQ#2(/await)
-  194 init    PROMISE@7#80  tid=REQ#2(/await)  eid=REQ#2(/await)
-  195 init    Timeout@7#81  tid=REQ#2(/await)  eid=REQ#2(/await)
-  196 init    PROMISE@7#82  tid=PROMISE@7#80  eid=REQ#2(/await)
-  197 after   REQ#2(/await)  eid=REQ#2(/await)
-  204 init    REQ#3(/timer)  tid=HTTPINCOMINGMESSAGE#55  eid=HTTPINCOMINGMESSAGE#55
-  205 before  REQ#3(/timer)  eid=REQ#3(/timer)
-  206 http.in 'GET /timer'  eid=REQ#3(/timer)
-  207 init    PROMISE@4#84  tid=REQ#3(/timer)  eid=REQ#3(/timer)
-  208 init    Timeout later@8#85  tid=REQ#3(/timer)  eid=REQ#3(/timer)
-  209 resolve PROMISE@4#84  eid=REQ#3(/timer)
-  210 after   REQ#3(/timer)  eid=REQ#3(/timer)
-  217 init    REQ#4(/pipe)  tid=HTTPINCOMINGMESSAGE#58  eid=HTTPINCOMINGMESSAGE#58
-  218 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
-  219 http.in 'GET /pipe'  eid=REQ#4(/pipe)
-  220 init    PROMISE@4#87  tid=REQ#4(/pipe)  eid=REQ#4(/pipe)
-  225 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
-  226 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
-  227 resolve PROMISE@4#87  eid=REQ#4(/pipe)
-  228 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
-  240 init    REQ#5(/park)  tid=HTTPINCOMINGMESSAGE#61  eid=HTTPINCOMINGMESSAGE#61
-  241 before  REQ#5(/park)  eid=REQ#5(/park)
-  242 http.in 'GET /park'  eid=REQ#5(/park)
-  243 init    PROMISE@4#94  tid=REQ#5(/park)  eid=REQ#5(/park)
-  244 resolve PROMISE@4#94  eid=REQ#5(/park)
-  245 after   REQ#5(/park)  eid=REQ#5(/park)
-  260 before  Timeout@7#81  eid=Timeout@7#81
-  261 resolve PROMISE@7#80  eid=Timeout@7#81
-  262 after   Timeout@7#81  eid=Timeout@7#81
-  263 before  PROMISE@7#82  eid=PROMISE@7#82
-  265 before  REQ#2(/await)  eid=REQ#2(/await)
-  266 after   REQ#2(/await)  eid=REQ#2(/await)
-  267 resolve PROMISE@4#79  eid=PROMISE@7#82
-  268 resolve PROMISE@7#82  eid=PROMISE@7#82
-  269 after   PROMISE@7#82  eid=PROMISE@7#82
-  271 before  REQ#2(/await)  eid=REQ#2(/await)
-  275 http.out '200 GET /await'  eid=REQ#2(/await)
-  276 after   REQ#2(/await)  eid=REQ#2(/await)
-  279 before  REQ#2(/await)  eid=REQ#2(/await)
-  280 after   REQ#2(/await)  eid=REQ#2(/await)
-  284 before  REQ#2(/await)  eid=REQ#2(/await)
-  285 after   REQ#2(/await)  eid=REQ#2(/await)
-  288 before  REQ#2(/await)  eid=REQ#2(/await)
-  289 after   REQ#2(/await)  eid=REQ#2(/await)
-  291 before  Timeout later@8#85  eid=Timeout later@8#85
-  293 before  REQ#3(/timer)  eid=REQ#3(/timer)
-  294 after   REQ#3(/timer)  eid=REQ#3(/timer)
-  295 after   Timeout later@8#85  eid=Timeout later@8#85
-  297 before  REQ#3(/timer)  eid=REQ#3(/timer)
-  301 http.out '200 GET /timer'  eid=REQ#3(/timer)
-  302 after   REQ#3(/timer)  eid=REQ#3(/timer)
-  305 before  REQ#3(/timer)  eid=REQ#3(/timer)
-  306 after   REQ#3(/timer)  eid=REQ#3(/timer)
-  310 before  REQ#3(/timer)  eid=REQ#3(/timer)
-  311 after   REQ#3(/timer)  eid=REQ#3(/timer)
-  314 before  REQ#3(/timer)  eid=REQ#3(/timer)
-  315 after   REQ#3(/timer)  eid=REQ#3(/timer)
-  356 init    REQ#6(/release)  tid=HTTPINCOMINGMESSAGE#96  eid=HTTPINCOMINGMESSAGE#96
-  357 before  REQ#6(/release)  eid=REQ#6(/release)
-  358 http.in 'GET /release'  eid=REQ#6(/release)
-  359 init    PROMISE@4#119  tid=REQ#6(/release)  eid=REQ#6(/release)
-  361 before  REQ#5(/park)  eid=REQ#5(/park)
-  362 after   REQ#5(/park)  eid=REQ#5(/park)
-  364 before  REQ#6(/release)  eid=REQ#6(/release)
-  365 after   REQ#6(/release)  eid=REQ#6(/release)
-  366 resolve PROMISE@4#119  eid=REQ#6(/release)
-  367 after   REQ#6(/release)  eid=REQ#6(/release)
-  374 before  REQ#5(/park)  eid=REQ#5(/park)
-  378 http.out '200 GET /park'  eid=REQ#5(/park)
-  379 after   REQ#5(/park)  eid=REQ#5(/park)
-  382 before  REQ#6(/release)  eid=REQ#6(/release)
-  386 http.out '200 GET /release'  eid=REQ#6(/release)
-  387 after   REQ#6(/release)  eid=REQ#6(/release)
-  390 before  REQ#5(/park)  eid=REQ#5(/park)
-  391 after   REQ#5(/park)  eid=REQ#5(/park)
+  158 init    Timeout resetCache@6#72  tid=REQ#1(/direct)  eid=REQ#1(/direct)
+  160 before  REQ#1(/direct)  eid=REQ#1(/direct)
+  161 after   REQ#1(/direct)  eid=REQ#1(/direct)
+  162 resolve PROMISE@4#71  eid=REQ#1(/direct)
+  163 after   REQ#1(/direct)  eid=REQ#1(/direct)
+  170 before  REQ#1(/direct)  eid=REQ#1(/direct)
+  174 http.out '200 GET /direct'  eid=REQ#1(/direct)
+  175 after   REQ#1(/direct)  eid=REQ#1(/direct)
+  178 before  REQ#1(/direct)  eid=REQ#1(/direct)
+  179 after   REQ#1(/direct)  eid=REQ#1(/direct)
+  183 before  REQ#1(/direct)  eid=REQ#1(/direct)
+  184 after   REQ#1(/direct)  eid=REQ#1(/direct)
+  187 before  REQ#1(/direct)  eid=REQ#1(/direct)
+  188 after   REQ#1(/direct)  eid=REQ#1(/direct)
+  191 init    REQ#2(/await)  tid=HTTPINCOMINGMESSAGE#52  eid=HTTPINCOMINGMESSAGE#52
+  192 before  REQ#2(/await)  eid=REQ#2(/await)
+  193 http.in 'GET /await'  eid=REQ#2(/await)
+  194 init    PROMISE@4#79  tid=REQ#2(/await)  eid=REQ#2(/await)
+  195 init    PROMISE@7#80  tid=REQ#2(/await)  eid=REQ#2(/await)
+  196 init    Timeout@7#81  tid=REQ#2(/await)  eid=REQ#2(/await)
+  197 init    PROMISE@7#82  tid=PROMISE@7#80  eid=REQ#2(/await)
+  198 after   REQ#2(/await)  eid=REQ#2(/await)
+  205 init    REQ#3(/timer)  tid=HTTPINCOMINGMESSAGE#55  eid=HTTPINCOMINGMESSAGE#55
+  206 before  REQ#3(/timer)  eid=REQ#3(/timer)
+  207 http.in 'GET /timer'  eid=REQ#3(/timer)
+  208 init    PROMISE@4#84  tid=REQ#3(/timer)  eid=REQ#3(/timer)
+  209 init    Timeout later@8#85  tid=REQ#3(/timer)  eid=REQ#3(/timer)
+  210 resolve PROMISE@4#84  eid=REQ#3(/timer)
+  211 after   REQ#3(/timer)  eid=REQ#3(/timer)
+  218 init    REQ#4(/pipe)  tid=HTTPINCOMINGMESSAGE#58  eid=HTTPINCOMINGMESSAGE#58
+  219 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
+  220 http.in 'GET /pipe'  eid=REQ#4(/pipe)
+  221 init    PROMISE@4#87  tid=REQ#4(/pipe)  eid=REQ#4(/pipe)
+  226 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
+  227 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
+  228 resolve PROMISE@4#87  eid=REQ#4(/pipe)
+  229 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
+  241 init    REQ#5(/park)  tid=HTTPINCOMINGMESSAGE#61  eid=HTTPINCOMINGMESSAGE#61
+  242 before  REQ#5(/park)  eid=REQ#5(/park)
+  243 http.in 'GET /park'  eid=REQ#5(/park)
+  244 init    PROMISE@4#94  tid=REQ#5(/park)  eid=REQ#5(/park)
+  245 resolve PROMISE@4#94  eid=REQ#5(/park)
+  246 after   REQ#5(/park)  eid=REQ#5(/park)
+  261 before  Timeout@7#81  eid=Timeout@7#81
+  262 resolve PROMISE@7#80  eid=Timeout@7#81
+  263 after   Timeout@7#81  eid=Timeout@7#81
+  264 before  PROMISE@7#82  eid=PROMISE@7#82
+  267 before  REQ#2(/await)  eid=REQ#2(/await)
+  268 after   REQ#2(/await)  eid=REQ#2(/await)
+  269 resolve PROMISE@4#79  eid=PROMISE@7#82
+  270 resolve PROMISE@7#82  eid=PROMISE@7#82
+  271 after   PROMISE@7#82  eid=PROMISE@7#82
+  273 before  REQ#2(/await)  eid=REQ#2(/await)
+  277 http.out '200 GET /await'  eid=REQ#2(/await)
+  278 after   REQ#2(/await)  eid=REQ#2(/await)
+  281 before  REQ#2(/await)  eid=REQ#2(/await)
+  282 after   REQ#2(/await)  eid=REQ#2(/await)
+  286 before  REQ#2(/await)  eid=REQ#2(/await)
+  287 after   REQ#2(/await)  eid=REQ#2(/await)
+  290 before  REQ#2(/await)  eid=REQ#2(/await)
+  291 after   REQ#2(/await)  eid=REQ#2(/await)
+  293 before  Timeout later@8#85  eid=Timeout later@8#85
+  296 before  REQ#3(/timer)  eid=REQ#3(/timer)
+  297 after   REQ#3(/timer)  eid=REQ#3(/timer)
+  298 after   Timeout later@8#85  eid=Timeout later@8#85
+  300 before  REQ#3(/timer)  eid=REQ#3(/timer)
+  304 http.out '200 GET /timer'  eid=REQ#3(/timer)
+  305 after   REQ#3(/timer)  eid=REQ#3(/timer)
+  308 before  REQ#3(/timer)  eid=REQ#3(/timer)
+  309 after   REQ#3(/timer)  eid=REQ#3(/timer)
+  313 before  REQ#3(/timer)  eid=REQ#3(/timer)
+  314 after   REQ#3(/timer)  eid=REQ#3(/timer)
+  317 before  REQ#3(/timer)  eid=REQ#3(/timer)
+  318 after   REQ#3(/timer)  eid=REQ#3(/timer)
+  359 init    REQ#6(/release)  tid=HTTPINCOMINGMESSAGE#96  eid=HTTPINCOMINGMESSAGE#96
+  360 before  REQ#6(/release)  eid=REQ#6(/release)
+  361 http.in 'GET /release'  eid=REQ#6(/release)
+  362 init    PROMISE@4#119  tid=REQ#6(/release)  eid=REQ#6(/release)
+  365 before  REQ#5(/park)  eid=REQ#5(/park)
+  366 after   REQ#5(/park)  eid=REQ#5(/park)
+  369 before  REQ#6(/release)  eid=REQ#6(/release)
+  370 after   REQ#6(/release)  eid=REQ#6(/release)
+  371 resolve PROMISE@4#119  eid=REQ#6(/release)
+  372 after   REQ#6(/release)  eid=REQ#6(/release)
+  379 before  REQ#5(/park)  eid=REQ#5(/park)
+  383 http.out '200 GET /park'  eid=REQ#5(/park)
+  384 after   REQ#5(/park)  eid=REQ#5(/park)
+  387 before  REQ#6(/release)  eid=REQ#6(/release)
+  391 http.out '200 GET /release'  eid=REQ#6(/release)
+  392 after   REQ#6(/release)  eid=REQ#6(/release)
   395 before  REQ#5(/park)  eid=REQ#5(/park)
   396 after   REQ#5(/park)  eid=REQ#5(/park)
-  399 before  REQ#6(/release)  eid=REQ#6(/release)
-  400 after   REQ#6(/release)  eid=REQ#6(/release)
+  400 before  REQ#5(/park)  eid=REQ#5(/park)
+  401 after   REQ#5(/park)  eid=REQ#5(/park)
   404 before  REQ#6(/release)  eid=REQ#6(/release)
   405 after   REQ#6(/release)  eid=REQ#6(/release)
-  408 before  REQ#5(/park)  eid=REQ#5(/park)
-  409 after   REQ#5(/park)  eid=REQ#5(/park)
-  412 before  REQ#6(/release)  eid=REQ#6(/release)
-  413 after   REQ#6(/release)  eid=REQ#6(/release)
-  560 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
-  561 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
-  565 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
-  569 http.out '200 GET /pipe'  eid=REQ#4(/pipe)
-  570 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
-  571 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
-  572 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
-  575 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
-  576 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
-  580 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
-  581 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
-  584 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
-  585 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
+  409 before  REQ#6(/release)  eid=REQ#6(/release)
+  410 after   REQ#6(/release)  eid=REQ#6(/release)
+  413 before  REQ#5(/park)  eid=REQ#5(/park)
+  414 after   REQ#5(/park)  eid=REQ#5(/park)
+  417 before  REQ#6(/release)  eid=REQ#6(/release)
+  418 after   REQ#6(/release)  eid=REQ#6(/release)
+  566 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
+  567 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
+  571 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
+  575 http.out '200 GET /pipe'  eid=REQ#4(/pipe)
+  576 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
+  577 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
+  578 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
+  581 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
+  582 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
+  586 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
+  587 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
+  590 before  REQ#4(/pipe)  eid=REQ#4(/pipe)
+  591 after   REQ#4(/pipe)  eid=REQ#4(/pipe)
 ```

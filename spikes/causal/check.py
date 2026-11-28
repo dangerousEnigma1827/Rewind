@@ -117,8 +117,12 @@ for l in [e for e in r.events if e["kind"] == "log" and e["name"].startswith("ct
     rows.append(f"{where}={p['eid']}/{seen}")
 check("S2", "a: async.init.eid equals executionAsyncId() seen by user code (8 creation contexts)", ok == 8, " ".join(rows))
 
-skip = {"forever.js", "kill_after_error.js"}  # kill-driven fixtures: they never exit on their own
-fixtures = [lib.ROOT / "demo" / "traffic.js"] + [f for f in sorted((lib.ROOT / "tests" / "fixtures").glob("*.js")) if f.name not in skip] \
+# The fixtures that existed before F15 (kill-driven forever.js / kill_after_error.js left out: they never exit).
+# F15 added shared_*.js, mutex_queue.js and response_origin.js, which cross requests ON PURPOSE.
+PRE_F15 = ["chain.js", "cluster_primary.js", "fork_parent.js", "http_keepalive.js", "http_two.js", "many_writes.js",
+           "mutations.js", "reads.js", "reads_http.js", "reject_await.js", "snapshot.js", "stall.js", "state.js",
+           "tdz_read.js", "throw_timer.js"]
+fixtures = [lib.ROOT / "demo" / "traffic.js"] + [lib.ROOT / "tests" / "fixtures" / f for f in PRE_F15] \
     + [lib.ROOT / "spikes" / "fixtures" / "e6_load.js"]
 story_dis, user_dis, internal_dis, eid0_user, eid0_types, n_story = 0, 0, 0, 0, set(), 0
 for f in fixtures:
@@ -212,9 +216,11 @@ check("S4", "/park: ended from /release's handler; the end-call context belongs 
 p, q = probe["/pipe"], req_of_url(r, "/pipe")
 check("S4", "/pipe: stream.pipe ends the response from Node internals (no user frame), still inside its request",
       not p["stack"] and r.req_by_created(p["eid"]) == q, f"{r.describe(p['eid'])}, stack={p['stack']}")
-rec_frames = [s for s in probe["/direct"]["stack"] if "recorder.js" in s]
-check("S4", "a handler-context end() stack includes the recorder's own frames (production must filter them)",
-      bool(rec_frames), f"{rec_frames}: recorder.js keepFile() already drops its own directory")
+ends = r.kind("http.end")  # since F15 the production recorder writes these itself
+check("S4", "production http.end: one per response, same context as the probe, no recorder frames",
+      len(ends) == 6 and all(next(p for p in r.probes if p["url"] == r.urls[e["data"]["req"]])["eid"] == e["eid"] for e in ends)
+      and not any("recorder" in f["file"] for e in ends for f in e.get("stack") or []),
+      f"{len(ends)} http.end events (the probe is now redundant)" if ends else "recorder predates F15: no http.end")
 
 # ---- output ---------------------------------------------------------------------------------------------------
 (HERE / "check_results.json").write_text(json.dumps(results, indent=1), encoding="utf-8")
