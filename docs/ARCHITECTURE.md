@@ -131,6 +131,18 @@ Interaction model:
 - **Evidence navigation:** a finding's evidence seqs are walked with enter / `]` / `[`. `jump(seq)` widens the timeline
   filters only as far as needed: search and kind first, then the request, then "every event". For diff findings it
   first opens the run (A or B) the evidence belongs to.
+- **Keys** are all app-level `BINDINGS`, without `priority`. Textual offers a key to the focused widget first and then
+  checks bindings along the focused widget's ancestors up to the app, so an app binding works from any focus as long
+  as no widget consumes the key. Only text fields (`Input`) consume printable keys, by design. Every key has one
+  meaning across screens (Home's `s` is the sample; the investigation has no `s`). `<` `>` are also bound as `,` `.`
+  and `shift+,` `shift+.`, because under the kitty keyboard protocol a terminal may report the key rather than the
+  character. Views are `1`–`7`, their tab positions.
+- **Going back:** `follow(view)` records the view a link was followed from (enter on an item, `w`, `v`, evidence);
+  `esc` clears the timeline search first, then returns there. Home opened with `h` is a `HomeScreen(back=True)`, and
+  its `esc` pops back to the investigation unchanged.
+- **Tab bar:** `ContentTabs.can_focus = False`, so the bar is never a focus stop with its own ←/→. `_tab_labels()`
+  names every tab when the bar has room and otherwise only the active one (the rest show their number), so it never
+  scrolls.
 - **Responsive layout** comes from screen classes set on resize:
   - three panes at 150+ columns
   - `-medium` at 120–149

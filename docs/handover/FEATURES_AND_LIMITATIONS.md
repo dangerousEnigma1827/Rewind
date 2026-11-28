@@ -37,18 +37,50 @@ Redesigned on `feat/ultraviolet-tui` for first-time users ([TUI_UX_AUDIT.md](TUI
 
 **What it shows**
 - **Sidebar:** recordings, and the selected run's requests (answered / failed / no response / client gave up, from `pending`, with a legend).
-- **Main view**, seven tabs, each with a one-line description and its key:
-  - **Overview:** what happened and where to look first
-  - **Explain** (`why`): for the selected story event, or the first error
-  - **Timeline:** story events, with search, kind filter, callback starts and every event (capped at 20 000 rows)
-  - **Unfinished** (`pending`)
-  - **Variables** (`state`): at the timeline event you picked, or the first error until you pick one
-  - **Tree:** for the selected request
-  - **Compare** (`diff`): pick the other recording in place, or use `b` then `d`
+- **Main view**, seven numbered tabs, each with a one-line description:
+  - **1 Overview:** what happened and where to look first
+  - **2 Explain** (`why`): for the selected story event, or the first error
+  - **3 Timeline:** story events, with search, kind filter, callback starts and every event (capped at 20 000 rows)
+  - **4 Unfinished** (`pending`)
+  - **5 Variables** (`state`): at the timeline event you picked, or the first error until you pick one
+  - **6 Tree:** for the selected request
+  - **7 Compare** (`diff`): pick the other recording in place; after `b` on a run, Compare opens on that comparison
+- **Tab bar:** the current view is always named; when the bar is too narrow for every name, the others show only
+  their number (with the name as a mouse tooltip). It never scrolls sideways and is not a focus stop.
 - **Findings** in every list are grouped: *Recorded* (observed), *Derived*, *Rewind's interpretation, not proven* (inferred).
 - **Details pane:** the focused item.
 
 **Evidence navigation:** every finding links to its evidence (enter, `]`, `[`), including diff evidence in the other run.
+
+**Keyboard model** (`rewind/tui/app.py` `BINDINGS`; tests in `tests/test_tui_keys.py`). Each key means one thing, and
+works from wherever focus is in the investigation, except inside a text field, where keys type text (`enter` or `esc`
+leaves it).
+
+| key | action | scope |
+|---|---|---|
+| `1`–`7` | the view with that number | investigation |
+| `<` `>` (also `,` `.`, and `shift+,` `shift+.`) | previous / next view; stops at the first and last | investigation |
+| `esc` | back: clear the timeline search and filters, else return to the view a followed link came from | investigation |
+| `esc` | close help · stop or leave Record · return from Home to the run it was opened from | Help, Record, Home |
+| `?` · `q` | help · quit (`q` closes help when it is open; it is refused while a program is being recorded) | everywhere |
+| `tab` `shift+tab` | next / previous panel | investigation |
+| `↑ ↓` `j k` `g G` · `enter` | move in the focused list · first / last · open | lists |
+| `w` · `v` | explain the selected event · variables at the selected event (both are undone by `esc`) | investigation |
+| `]` `[` · `b` | next / previous evidence of the selected finding · compare other runs against this one | investigation |
+| `/` `f` `c` `a` | search · kind filter · callback starts · every event | timeline |
+| `h` `n` `r` `i` `\` | home · record · reload · details · sidebar | investigation |
+| `enter` · `n` · `s` | open a recording · record · try the sample | Home |
+| `enter` / `ctrl+s` · `esc` | start · stop or go back | Record |
+
+Intentional differences: `s` exists only on Home (the sample); `esc` on Home works only when Home was opened from an
+investigation (on first launch there is nothing to go back to); `q` on the help card closes it.
+
+Replaced in the navigation audit: the view letters `o` `t` `p` `s` `e` `d` (by the numbers), `1`–`4` for panels (by
+`tab`), wrapping `<` `>`, and the tab bar's own `←` `→`. `w` and `v` stay as actions on the selected event; `v` was not
+bound before, although Variables was the natural guess.
+
+**Not verified:** real keyboard layouts other than US and real terminals sending kitty-protocol key reports without
+text (the `shift+.` / `shift+,` aliases are tested through Textual's key names, not a real terminal).
 
 **Look:** Ultraviolet, from the website's tokens: violet for the brand, focus and selection on a strictly dark foundation. Green, red and amber are used only for status.
 
@@ -64,7 +96,7 @@ Redesigned on `feat/ultraviolet-tui` for first-time users ([TUI_UX_AUDIT.md](TUI
 **Limits**
 - Runs load synchronously, so very large runs pause the UI while they load.
 - The "every event" timeline shows at most 20 000 rows.
-- The state view isn't navigable: it follows the timeline cursor, and you press `s` to refresh it.
+- The state view isn't navigable: it follows the timeline cursor, and you press `v` to refresh it.
 
 ## State at a point (`at`, F14)
 

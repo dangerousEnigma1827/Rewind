@@ -30,7 +30,9 @@ Back to [HANDOVER.md](HANDOVER.md). Done on `feat/tui-visual-polish`, from `feat
    - Each label carries its key as a small dim letter.
    - The tab bar scrolls horizontally with a thin scrollbar when the labels don't fit, and Textual already scrolls the active tab into view.
    - Labels are clickable.
-   - `<` and `>` move to the previous / next view. The view letters `o w t p s e d` stay.
+   - `<` and `>` move to the previous / next view. The view letters `o w t p s e d` stay. *(Superseded by the
+     navigation audit: views are now `1`–`7`, the tab bar no longer scrolls, and `<` `>` stop at the ends. See
+     [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md#interactive-app-rewind-ui).)*
 4. **Scrollbars:** a thin renderer (`ThinScrollBarRender`): a half-cell thumb (`▐` vertical, `▄` horizontal) on the panel's own dark track. It turns violet on hover and drag, and click, drag and wheel behave as before.
 5. **Help**
    - A centered card with a title row ("Keyboard shortcuts" and an `esc` keycap).
