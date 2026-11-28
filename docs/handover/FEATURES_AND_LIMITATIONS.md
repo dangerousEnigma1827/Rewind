@@ -109,7 +109,8 @@ Source text comes from the run's snapshot, taken at ingest and checked against S
 ## Timelines and execution trees
 
 - Timeline: request-tagged story events in `seq` order; internal noise collapsed (~330 events per HTTP request measured in M0 E6, so collapsing is essential). A response row says which callback sent it ("sent from Timeout later").
-- Tree: creation ancestry (the execution that scheduled each resource) with creation sites and callback names; frameless hops (e.g. `fs.readFile`'s 4 internal hops) folded. A response sits under the callback that called `end()` when that callback belongs to the same request. A callback that waited on a promise settled by another request's work (or by no request's) is marked `⇠ waited on #N <callback> at <site>, settled seq S`.
+- Tree: creation ancestry (the execution that scheduled each resource) with creation sites and callback names; frameless hops (e.g. `fs.readFile`'s 4 internal hops) folded. A response sits under the callback that called `end()` when that callback belongs to the same request. A callback that waited on a promise settled by another request's work (or by no request's) is marked `⇠ waited on #N <callback> at <site>, settled seq S`. A chain of identical resources with nothing emitted along the way (an `await` in a loop) is one node marked `×N`; `--full` shows every one. Built and drawn iteratively, so trees thousands deep work in the CLI and the app.
+- `why`'s causal chain merges consecutive identical hops the same way (`PROMISE (app.js:6) ×3000 ← request #1`).
 
 ## Causal reconstruction (F15)
 
@@ -122,11 +123,15 @@ Spikes and event sequences: `spikes/causal/RESULTS.md`. Tests: `tests/test_causa
   - ◆ when the settling callback belongs to another request: "waited on work started by request #N"
   - ? "depends on request #N's shared in-flight work", hedged for errors ("may come from that request's work")
 
-  Chains through Node's internal promises: `resolve(otherPromise)`, `return p` from an async function, `Promise.all` (released by the slowest element), `Promise.race` (the winner), `events.once`, thenables.
+  Chains through Node's internal promises: `resolve(otherPromise)`, `return p` from an async function, `Promise.all` (released by the slowest element), `Promise.race` (the winner), `events.once`, thenables. A hop that didn't wait ends the chain.
+
+  What counts as "released": only a promise reaction (its trigger differs from its creating execution; `new Promise`, `Promise.resolve` and async-function promises are not reactions) and only on its first run. A then-callback that returns a thenable makes Node run the thenable's `then()` as a second run of the same reaction; that run gets no release edge.
+- **Unhandled rejections.** The error's context is the rejected promise, which never ran. `why` reports ● who settled that promise and, through the promise hops, ● where the rejection started, ◆ when that is another request's work, and the hedged ? dependency.
 - **Who sent a response.** `http.end` records the first `res.end()` call. `why -r N` (or `why --seq` on an `http.out`):
   - ● the callback and source line that called `end()`, or "Node internals" (e.g. `stream.pipe`), with the user code that started that internal work (◆)
-  - ◆ another request's code ending this response (a parked long-poll response, for example)
-  - ◆ the path from arrival to `end()`: → scheduled by, ⇠ waited until settled, … no recorded link (another request's arrival), with ms offsets. Runs of internal steps are folded, and the largest gap is named when it is at least half the time.
+  - ◆ another request's code, or code outside any request (a module-level flush timer), ending this response
+  - ◆ the path from arrival to `end()`: → scheduled by, ⇠ waited until settled, … no recorded link, with ms since the request arrived (negative for another request's work that started earlier). A path that doesn't reach this request's arrival (another request's arrival, a timer outside any request, a gap) starts with this request's arrival and a "…" link, never a "→". Runs of internal steps fold, consecutive identical steps merge (`×N`), and the largest gap inside the request's lifetime is named when it is at least half the time. When the path runs through other requests' work: ◆ "the response depended on it". The CLI also prints the path as its own section, one step per line.
+- **Pending.** A request that called `res.end()` but never finished sending (the process exited first) is reported as such (● the `end()` call, ? answered but the program ended first), never as a stall or a missing `res.end()`.
 - **Limits.**
   - "Settled", never "resolved"/"rejected": `promiseResolve` fires for both and records no outcome.
   - A listener registered by one request and invoked synchronously by another's code runs in the invoker's context. No async resource links them, so it belongs to the invoker, and Rewind can't see the registration.
