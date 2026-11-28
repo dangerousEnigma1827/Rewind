@@ -254,27 +254,31 @@ commands. You don't need to know any command to use it:
      names, the `--watch` packages not installed.
    - The program's output streams below, and `esc` stops it. **Open this run** takes you straight to the results.
 3. **Investigate.** A run opens on an **Overview**: what happened, what to look at first (errors, requests that
-   were never answered) and Rewind's key findings. The other views each explain themselves in one line:
-   - **Explain:** why an event happened, starting with the first error.
-   - **Timeline:** every event, in order.
-   - **Unfinished:** what never completed.
-   - **Variables:** watched values at any point.
-   - **Tree:** who scheduled what.
+   were never answered) and Rewind's key findings. Seven numbered views, each explaining itself in one line:
+   **1** Overview · **2** Explain (why an event happened, starting with the first error) · **3** Timeline (every
+   event, in order) · **4** Unfinished (what never completed) · **5** Variables (watched values at any point) ·
+   **6** Tree (who scheduled what) · **7** Compare. The current view is always named on the tab bar; `<` and `>`
+   step to the previous / next one.
 4. **Evidence.** Findings are grouped by how certain they are: *Recorded*, *Derived*, and *Rewind's interpretation
    (not proven)*. Select one and press **enter** to see its evidence in the timeline. **]** and **[** step through
-   the rest.
+   the rest, and **esc** takes you back to where you followed it from.
 5. **Compare.** Pick another recording to find the first point where the two runs differ.
 
-| keys | |
-|---|---|
-| `n` `h` `?` `q` | record a program · home · help · quit |
-| `tab` / `1`–`4` | move between recordings, requests, main view, details |
-| `↑ ↓` `j k` `g G` | move within a list |
-| `o` `w` `t` `p` `s` `e` `d` | Overview · Explain · Timeline · Unfinished · Variables · Tree · Compare (each tab shows its key) |
-| `<` `>` | previous / next view (wraps around); tabs are also clickable and the tab bar scrolls when it doesn't fit |
-| `/` `f` `c` `a` `esc` | search · kind filter · callback starts · every event · clear |
-| `enter` `]` `[` | open; show a finding's evidence and step through it |
-| `b` `r` `i` `\` | compare others against this run · reload · details · sidebar |
+The footer always shows the few keys you need (`1-7` views, `<` `>`, `esc` back, `?` help, `q` quit); `?` lists
+the rest. Each key means one thing everywhere.
+
+| keys | where | |
+|---|---|---|
+| `1`–`7` · `<` `>` | investigation | a view by its number · previous / next view (also `,` `.`; they stop at the first and last view) |
+| `↑ ↓` `j k` `g G` · `enter` | lists | move · first / last · open the selected item |
+| `esc` | everywhere | back: close help; leave Record; return from Home to the run; clear the timeline search, then go back to the view a link came from |
+| `tab` `shift+tab` | investigation | next / previous panel (recordings, requests, the view, details) |
+| `w` `v` · `]` `[` · `b` | the selected event | explain it · variables at that moment · its finding's next / previous evidence · compare other runs against this one |
+| `/` `f` `c` `a` | timeline | search · kind filter · callback starts · every event |
+| `h` `n` `r` · `i` `\` · `?` `q` | investigation | home · record · reload · details · sidebar · help · quit |
+| `enter` `n` `s` | Home | open a recording · record · try the sample |
+
+While a text field (the timeline search, the Record form) has focus, keys type text; `enter` or `esc` leaves it.
 
 The layout adapts to the terminal:
 - three panes from 150 columns, with narrower side panes from 120

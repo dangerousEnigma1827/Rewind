@@ -175,7 +175,7 @@ def event_detail(run: A.Run, e) -> Group:
     elif e.kind in A.ERROR_KINDS:
         g.add_row("how", Text({"uncaughtException": "uncaught exception", "unhandledRejection": "unhandled promise rejection"}
                               .get((d.get("origin") or ""), "logged with console.error")))
-    parts += [Text(), g, Text(), T("[key]w[/] [text3]explain this event[/]   [key]s[/] [text3]variables at this point[/]")]
+    parts += [Text(), g, Text(), T("[key]w[/] [text3]explain this event[/]   [key]v[/] [text3]variables at this point[/]")]
     return Group(*parts)
 
 
@@ -284,11 +284,12 @@ def overview(run: A.Run, row, pend: A.Pending, why: A.Investigation | None) -> l
     items.append(Item(None, T("[eyebrow]NEXT[/]")))
     tips = []
     if run.errors:
-        tips.append("[key]w[/] [text2]explains the first error step by step[/]")
-    tips += ["[key]t[/] [text2]shows every event in order[/]", "[key]p[/] [text2]lists what never finished[/]"]
+        tips.append("[key]2[/] [text2]Explain: the first error, step by step[/]")
+    tips += ["[key]3[/] [text2]Timeline: every event in order[/]", "[key]4[/] [text2]Unfinished: what never finished[/]"]
     if run.watch:
-        tips.append("[key]s[/] [text2]shows watched variables at any point[/]")
-    tips.append("[key]d[/] [text2]compares this run with another recording[/]")
+        tips.append("[key]5[/] [text2]Variables: watched values at any point[/]")
+    tips.append("[key]7[/] [text2]Compare: this run against another recording[/]")
+    tips.append("[dim]or[/] [key]<[/] [key]>[/] [text2]previous / next view ·[/] [key]?[/] [text2]every key[/]")
     items += [Item(None, T("  " + t)) for t in tips]
     return items
 
@@ -337,25 +338,27 @@ def diff_view(res, a_title: str, b_title: str, context: int = 3) -> Group:
 
 
 # ---- help ---------------------------------------------------------------------------------------
-# (keys, what it does). Descriptions stay short enough to fit one line in the two-column layout.
+# (keys, what it does). Descriptions stay short enough to fit one line in the two-column layout. Every key here is a real
+# binding (tests/test_tui_keys.py checks both directions), and no key means two different things.
 HELP = {
-    "Getting started": [(["n"], "record a program"), (["h"], "home: your recordings"), (["enter"], "open the selected item"),
-                        (["?"], "this help")],
-    "Recording": [(["enter"], "start, from the form"), (["ctrl+s"], "start recording"), (["esc"], "stop, or go back"),
-                  (["enter"], "open the finished run")],
-    "Navigation": [(["tab"], "next panel"), (["shift+tab"], "previous panel"), (["1–4"], "jump to a panel"),
-                   (["↑", "↓"], "move in a list"), (["j", "k"], "move in a list"), (["g", "G"], "first / last row"),
-                   (["<", ">"], "previous / next view")],
-    "Investigation": [(["o"], "Overview: start here"), (["w"], "Explain the selected event"), (["t"], "Timeline: every event"),
-                      (["p"], "Unfinished: never completed"), (["s"], "Variables at the selected event"),
-                      (["e"], "Tree: who scheduled what"), (["d"], "Compare with another recording")],
-    "Evidence": [(["enter"], "show a finding's evidence"), (["]"], "next evidence event"), (["["], "previous evidence event"),
-                 (["b"], "use as the comparison run")],
-    "General": [(["/"], "search the timeline"), (["f"], "filter the timeline by kind"), (["c"], "show callback starts"),
-                (["a"], "show every recorded event"), (["esc"], "clear search and filters"), (["i"], "show or hide details"),
-                (["\\"], "show or hide the sidebar"), (["r"], "reload recordings"), (["q"], "quit")],
+    "Views": [(["1"], "Overview: start here"), (["2"], "Explain: why it happened"), (["3"], "Timeline: every event"),
+              (["4"], "Unfinished: never completed"), (["5"], "Variables: watched values"),
+              (["6"], "Tree: who scheduled what"), (["7"], "Compare with another run"),
+              (["<", ">"], "previous / next view")],
+    "Moving around": [(["↑", "↓"], "move in a list"), (["j", "k"], "move in a list"), (["g", "G"], "first / last item"),
+                      (["enter"], "open the selected item"), (["esc"], "back"), (["tab"], "next panel"),
+                      (["shift+tab"], "previous panel")],
+    "The selected event": [(["w"], "explain it"), (["v"], "variables at that moment"), (["]", "["], "next / previous evidence"),
+                           (["b"], "compare other runs against this one")],
+    "Timeline": [(["/"], "search"), (["f"], "filter by kind"), (["c"], "show callback starts"), (["a"], "every recorded event")],
+    "Recordings": [(["h"], "home: your recordings"), (["n"], "record a program"), (["r"], "reload")],
+    "Screen": [(["i"], "show or hide details"), (["\\"], "show or hide the sidebar"), (["?"], "this help"), (["q"], "quit")],
 }
-HELP_COLUMNS = (["Getting started", "Navigation", "Evidence"], ["Recording", "Investigation", "General"])
+HELP_COLUMNS = (["Views", "The selected event", "Recordings"], ["Moving around", "Timeline", "Screen"])
+HELP_NOTE = ("On Home: [key]enter[/] [text3]opens a recording,[/] [key]n[/] [text3]records,[/] [key]s[/] [text3]tries the "
+             "sample. Recording:[/] [key]enter[/] [text3]or[/] [key]ctrl+s[/] [text3]starts,[/] [key]esc[/] "
+             "[text3]stops or goes back. While typing in a field, keys type text:[/] [key]enter[/] [text3]or[/] "
+             "[key]esc[/] [text3]leaves it.[/]")
 
 
 def keycaps(keys: list[str]) -> Text:
@@ -396,6 +399,8 @@ def help_content(two_columns: bool = True) -> Group:
     legend.add_row(Text(""), T("[eyebrow]HOW SURE IS A FINDING?[/]"))
     for level, name, what in GROUPS:
         legend.add_row(T(f"{R.LEVEL[level]}"), T(f"[text]{name.capitalize()}[/]  [text3]{what}[/]"))
+    legend.add_row(Text(""), Text(""))
+    legend.add_row(Text(""), T(HELP_NOTE))
     return Group(body, Text(), legend)
 
 

@@ -19,6 +19,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.scrollbar import ScrollBar
 from textual.widgets import DataTable, Footer, Input, OptionList, Static, TabbedContent, TabPane, Tree
+from textual.widgets._tabbed_content import ContentTabs
 from textual.widgets.option_list import Option
 
 from .. import analysis as A
@@ -33,8 +34,9 @@ ScrollBar.renderer = ThinScrollBarRender  # every scrollable region in the app g
 KINDS = [("all events", None), ("requests", ("http",)), ("logs", ("log",)), ("errors", ("error",)),
          ("writes", ("mutation",)), ("reads", ("read",)), ("snapshots", ("snapshot",))]
 RAW_LIMIT = 20000  # rows the "every event" view shows; the CLI's --raw has no limit
-TABS = [("overview", "Overview", "o"), ("why", "Explain", "w"), ("timeline", "Timeline", "t"),
-        ("pending", "Unfinished", "p"), ("state", "Variables", "s"), ("tree", "Tree", "e"), ("diff", "Compare", "d")]
+# The views, in tab order. Each one's key is its position: 1–7 (no Shift on any layout, and the number is on the tab).
+TABS = [("overview", "Overview", "1"), ("why", "Explain", "2"), ("timeline", "Timeline", "3"),
+        ("pending", "Unfinished", "4"), ("state", "Variables", "5"), ("tree", "Tree", "6"), ("diff", "Compare", "7")]
 INTRO = {
     "overview": "Start here: what happened in this run, and where to look first.",
     "why": "Why did it happen? Rewind traces the selected event (by default the first error) back through the callbacks "
@@ -44,15 +46,27 @@ INTRO = {
     "pending": "Requests and operations that never reached an outcome: no response, a promise that never settled, a "
                "timer that never fired. Only claimed when the recording is complete.",
     "state": "Watched variables as last recorded at the event selected in the Timeline. Pick another event there and "
-             "press s.",
+             "press v.",
     "tree": "Who scheduled what: each request, the timers, file reads and promises it started, and what each did. "
             "Select a request on the left to see only its tree.",
     "diff": "Compare this recording (B) with another one (A) to find the first point where their executions differ. "
             "Pick the other recording:",
 }
-INVESTIGATION_ONLY = {"search", "why", "view", "step_view", "state", "diff", "baseline", "kind_filter", "callbacks", "raw",
-                      "evidence", "reload", "details", "toggle", "clear", "focus_panel", "cursor", "edge", "home",
-                      "new_recording"}
+INVESTIGATION_ONLY = {"search", "why", "view", "step_view", "state", "baseline", "kind_filter", "callbacks", "raw",
+                      "evidence", "reload", "details", "toggle", "back", "cursor", "edge", "home", "new_recording"}
+# The key model (see docs/handover/FEATURES_AND_LIMITATIONS.md). One key, one meaning: no letter here is reused by
+# another screen for something else (Home's s is "sample"; the investigation has no s). < and > also answer to the
+# unshifted , and . (the same keys on US layouts) and to shift+, / shift+. (terminals that report the key, not the
+# character, under the kitty keyboard protocol), so moving between views never depends on how Shift is reported.
+VIEW_KEYS = [Binding(key, f"view('{pane}')", label, show=False) for pane, label, key in TABS]
+
+
+def tab_label(key: str, label: str | None) -> str:
+    """`3 Timeline`, or just `3` for an inactive tab when the bar is too narrow for every name."""
+    return f"[{V.TH.C['text3']}]{key}[/]" + (f" {label}" if label else "")
+
+
+TAB_FULL_WIDTH = sum(len(f"{k} {lbl}") + 2 for _, lbl, k in TABS)  # every tab named (each has 1 cell of padding a side)
 
 
 def home_path() -> Path:
@@ -97,34 +111,34 @@ class RewindApp(App):
     TITLE = "rewind"
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
-        Binding("question_mark", "help", "help"),
-        Binding("h", "home", "home"),
-        Binding("n", "new_recording", "record"),
-        Binding("slash", "search", "search"),
+        # shown in the footer: the few keys a first-time user needs
+        Binding("1", "view('overview')", "views", key_display="1-7"),
+        Binding("less_than_sign,comma,shift+comma", "step_view(-1)", "prev", key_display="<"),
+        Binding("greater_than_sign,full_stop,shift+full_stop", "step_view(1)", "next", key_display=">"),
+        Binding("escape", "back", "back", key_display="esc"),
+        Binding("question_mark", "help", "help", key_display="?"),
         Binding("q", "quit", "quit"),
-        Binding("greater_than_sign", "step_view(1)", "next view", key_display=">"),
-        Binding("less_than_sign", "step_view(-1)", "previous view", show=False, key_display="<"),
-        Binding("o", "view('overview')", "overview", show=False),
-        Binding("w", "why", "explain", show=False),
-        Binding("t", "view('timeline')", "timeline", show=False),
-        Binding("p", "view('pending')", "unfinished", show=False),
-        Binding("s", "state", "variables", show=False),
-        Binding("e", "view('tree')", "async tree", show=False),
-        Binding("d", "diff", "compare", show=False),
-        Binding("b", "baseline", "compare against", show=False),
+        *VIEW_KEYS[1:],
+        # the selected event
+        Binding("w", "why", "explain the selected event", show=False),
+        Binding("v", "state", "variables at the selected event", show=False),
+        Binding("right_square_bracket", "evidence(1)", "next evidence", show=False),
+        Binding("left_square_bracket", "evidence(-1)", "previous evidence", show=False),
+        Binding("b", "baseline", "use as the comparison run", show=False),
+        # the timeline
+        Binding("slash", "search", "search", show=False),
         Binding("f", "kind_filter", "filter", show=False),
         Binding("c", "callbacks", "callbacks", show=False),
         Binding("a", "raw", "all events", show=False),
-        Binding("right_square_bracket", "evidence(1)", "next evidence", show=False),
-        Binding("left_square_bracket", "evidence(-1)", "previous evidence", show=False),
+        # lists
+        Binding("j", "cursor(1)", show=False), Binding("k", "cursor(-1)", show=False),
+        Binding("g", "edge('first')", show=False), Binding("G,shift+g", "edge('last')", show=False),
+        # recordings and layout
+        Binding("h", "home", "home", show=False),
+        Binding("n", "new_recording", "record", show=False),
         Binding("r", "reload", "reload", show=False),
         Binding("i", "details", "details", show=False),
         Binding("backslash", "toggle('-hide-sidebar')", "sidebar", show=False),
-        Binding("escape", "clear", "clear", show=False),
-        Binding("1", "focus_panel('runs')", show=False), Binding("2", "focus_panel('requests')", show=False),
-        Binding("3", "focus_panel('main')", show=False), Binding("4", "focus_panel('details')", show=False),
-        Binding("j", "cursor(1)", show=False), Binding("k", "cursor(-1)", show=False),
-        Binding("g", "edge('first')", show=False), Binding("G", "edge('last')", show=False),
     ]
 
     def __init__(self, home: Path | None = None):
@@ -143,6 +157,7 @@ class RewindApp(App):
         self.diff_pair: tuple[str, str] | None = None
         self.why_target: int | None = None
         self._picked = False
+        self.came_from: list[str] = []  # views left by following a link (enter, w, evidence); esc goes back one
 
     # ---- layout -------------------------------------------------------------------------------
     def compose(self) -> ComposeResult:
@@ -155,15 +170,14 @@ class RewindApp(App):
             with Panel(id="main"):
                 with TabbedContent(id="views", initial="overview"):
                     for pane_id, label, key in TABS:
-                        with TabPane(f"{label} [{V.TH.C['dim']}]{key}[/]", id=pane_id):  # every tab shows its key
+                        with TabPane(tab_label(key, label), id=pane_id):  # every tab shows its key: its number
                             yield from self._pane(pane_id)
             with VerticalScroll(id="details-panel", classes="panel"):
                 yield Static(id="details")
         yield Footer()
 
     def _pane(self, pane_id: str):
-        label, key = next((lbl, k) for p, lbl, k in TABS if p == pane_id)
-        intro = f"[text3]{INTRO[pane_id]}[/]  [dim]key[/] [key]{key}[/]" + (f"\n{V.TIMELINE_LEGEND}" if pane_id == "timeline" else "")
+        intro = f"[text3]{INTRO[pane_id]}[/]" + (f"\n{V.TIMELINE_LEGEND}" if pane_id == "timeline" else "")
         yield Static(V.T(intro), classes="intro")
         if pane_id == "overview":
             yield OptionList(id="overview-list")
@@ -177,7 +191,7 @@ class RewindApp(App):
         elif pane_id == "pending":
             yield OptionList(id="pending-list")
         elif pane_id == "state":
-            with VerticalScroll():
+            with VerticalScroll(id="state-scroll"):
                 yield Static(id="state-body")
         elif pane_id == "tree":
             yield Tree("tree", id="tree-view")
@@ -194,6 +208,9 @@ class RewindApp(App):
         for label, key in (("seq", "seq"), ("ms", "ms"), ("req", "req"), (" ", "g"), ("event", "event")):
             t.add_column(label, key=key)
         self._q("#tree-view", Tree).show_root = True
+        # The tab bar is for seeing and clicking, not a focus stop: in it, ← → would be a third way to change views
+        # (after 1–7 and < >) that works only while it happens to have focus.
+        self._q("#views").query_one(ContentTabs).can_focus = False
         self._layout(self.size.width, self.size.height)
         self.session.reload()
         self._fill_runs()
@@ -217,6 +234,7 @@ class RewindApp(App):
 
     def on_resize(self, event):
         self._layout(event.size.width, event.size.height)
+        self.call_after_refresh(self._tab_labels)
         if self.current is not None:
             self.call_after_refresh(self.refresh_timeline, True)
 
@@ -233,7 +251,7 @@ class RewindApp(App):
             self.push_screen(HelpScreen())
 
     def action_home(self):
-        self.push_screen(HomeScreen())
+        self.push_screen(HomeScreen(back=True))  # esc on Home returns here, to the same view and selection
 
     def action_new_recording(self):
         cmd = V.command(self.row) if self.row else ""
@@ -246,6 +264,7 @@ class RewindApp(App):
         self.session.reload()
         self._fill_runs(keep=run_id)
         self.open_run(run_id)
+        self.came_from.clear()
         self.action_view("overview")
         self._q("#overview-list", OptionList).focus()
 
@@ -323,7 +342,7 @@ class RewindApp(App):
             if b:
                 crumbs.append(f"[dim]compare against[/] [uv]{V.escape(b['label'] or b['id'])}[/]")
         self._q("#topbar", Static).update(V.topbar(*crumbs, right="[key]h[/] [dim]home[/]  [key]n[/] [dim]record[/]  "
-                                                          "[key]?[/] [dim]help[/]"))
+                                                          "[key]?[/] [dim]all keys[/]"))
 
     def _run_summary(self):
         r, run = self.row, self.current
@@ -348,6 +367,7 @@ class RewindApp(App):
 
     @on(OptionList.OptionSelected, "#runs")
     def _run_selected(self, ev):
+        self.came_from.clear()  # another run: the way back belongs to the old one
         self.action_view("overview")
         self.action_focus_panel("main")
 
@@ -387,7 +407,7 @@ class RewindApp(App):
 
     @on(OptionList.OptionSelected, "#requests")
     def _req_selected(self, ev):
-        self.action_view("timeline")
+        self.follow("timeline")
         self.action_focus_panel("main")
 
     # ---- overview -----------------------------------------------------------------------------
@@ -434,14 +454,14 @@ class RewindApp(App):
         if kind == "err":
             self.why_target = int(rest)
             self.refresh_why()
-            self.action_view("why")
+            self.follow("why")
             self._q("#why-list", OptionList).focus()
         elif kind == "req":
             reqs = self._q("#requests", OptionList)
             reqs.highlighted = 1 + list(self.current.requests).index(int(rest))
             self.req_filter = int(rest)
             self.refresh_timeline()
-            self.action_view("timeline")
+            self.follow("timeline")
             self._q("#table", DataTable).focus()
         elif kind == "find":
             self.active, self.ev_cursor = self._overview_finding(ev.option_id), 0
@@ -536,6 +556,10 @@ class RewindApp(App):
         self.action_view("timeline")
         self.refresh_timeline()
 
+    def _filtered(self) -> bool:
+        return bool(self.search_text or self.kind_idx or self.raw or self.callbacks
+                    or self._q("#search", Input).has_class("-shown"))
+
     def action_callbacks(self):
         self.callbacks, self.raw = not self.callbacks, False
         self.refresh_timeline()
@@ -546,13 +570,25 @@ class RewindApp(App):
 
     def action_clear(self):
         s = self._q("#search", Input)
-        changed = self.search_text or self.kind_idx or self.raw or self.callbacks or s.has_class("-shown")
+        changed = self._filtered()
         s.value, self.search_text = "", ""
         s.remove_class("-shown")
         self.kind_idx, self.raw, self.callbacks = 0, False, False
         if changed:
             self.refresh_timeline()
             self._q("#table", DataTable).focus()
+
+    def action_back(self):
+        """esc, in the investigation: first the timeline's search and filters, then the view a link brought you from."""
+        if self._q("#views", TabbedContent).active == "timeline" and self._filtered():
+            self.action_clear()
+        elif self.came_from:
+            self.action_view(self.came_from.pop())
+            self.action_focus_panel("main")
+        elif self._filtered():
+            self.action_clear()
+        else:
+            self.notify("Nothing to go back to here. h opens Home; ? lists every key.", timeout=3)
 
     # ---- findings: explain / unfinished / compare ------------------------------------------------
     def _fill(self, name: str, findings: list[A.Finding], empty: str):
@@ -690,7 +726,7 @@ class RewindApp(App):
                 self.raw = True
                 self.notify(f"Showing every recorded event, to reach event {seq}")
             self.refresh_timeline(keep_cursor=False)
-        self.action_view("timeline")
+        self.follow("timeline")
         t = self._q("#table", DataTable)
         if seq in self.shown:
             t.move_cursor(row=self.shown.index(seq), animate=False)
@@ -707,12 +743,12 @@ class RewindApp(App):
         elif self.why_target is None and self.current.errors:
             self.why_target = self.current.errors[0].seq
         self.refresh_why()
-        self.action_view("why")
+        self.follow("why")
         self._q("#why-list", OptionList).focus()
 
     def action_state(self):
         self.refresh_state()
-        self.action_view("state")
+        self.follow("state")
 
     def refresh_state(self):
         # the event the user picked in the timeline; until they pick one, the first error (or the end of the run)
@@ -803,22 +839,26 @@ class RewindApp(App):
         self.baseline = self.row["id"]
         self._topbar()
         self.notify(f"Other runs will be compared against {self.row['label'] or self.row['id']}. Open another "
-                    "recording and press d.")
-
-    def action_diff(self):
-        self.action_view("diff")
-        if self.baseline and self.baseline != self.row["id"]:
-            self._compare(self.baseline)
-        else:
-            self._q("#compare-runs", OptionList).focus()
+                    "recording and press 7 (Compare).")
 
     # ---- navigation ---------------------------------------------------------------------------
     def action_step_view(self, step: int):
-        """< and >: the previous / next view, wrapping around, so the far tabs are one key away from either end."""
+        """< and >: the previous / next view. They stop at the first and last view: 1–7 reach any view directly,
+        so wrapping around would only make the next key press less predictable."""
         ids = [p for p, _, _ in TABS]
         cur = self._q("#views", TabbedContent).active
-        self.action_view(ids[(ids.index(cur) + step) % len(ids)] if cur in ids else ids[0])
+        i = ids.index(cur) if cur in ids else 0
+        if not 0 <= i + step < len(ids):
+            return
+        self.action_view(ids[i + step])
         self.action_focus_panel("main")
+
+    def follow(self, name: str):
+        """Switch view because a link was followed (enter on an item, w, evidence): esc comes back here."""
+        active = self._q("#views", TabbedContent).active
+        if active != name:
+            self.came_from = (self.came_from + [active])[-20:]
+        self.action_view(name)
 
     def action_view(self, name: str):
         views = self._q("#views", TabbedContent)
@@ -826,7 +866,8 @@ class RewindApp(App):
         # in the now-hidden pane, and TabbedContent switches straight back to that pane.
         f = self.focused
         inside = f is not None and views in f.ancestors
-        if views.active != name:
+        switched = views.active != name
+        if switched:
             views.active = name
             if inside:
                 self.action_focus_panel("main")
@@ -834,6 +875,8 @@ class RewindApp(App):
             self.refresh_tree()
         if name == "state":
             self.refresh_state()
+        if name == "diff" and switched and self.baseline and self.baseline != self.row["id"]:
+            self._compare(self.baseline)  # a run marked with b: Compare opens on that comparison
         self._main_title()
 
     @on(TabbedContent.TabActivated, "#views")
@@ -849,22 +892,39 @@ class RewindApp(App):
 
     def _main_title(self):
         main = self._q("#main")
+        active = self._q("#views", TabbedContent).active
         main.border_title = (self.row["label"] or self.row["id"]) if self.row else ""
-        main.border_subtitle = {"timeline": "w explain · s variables · enter details",
-                                "overview": "enter opens the selected item", "why": "enter shows evidence · ] [ walk it",
-                                "pending": "enter shows evidence · ] [ walk it", "state": "follows the timeline's selection",
-                                "tree": "who scheduled whom", "diff": "A = picked recording · B = this one"
-                                }.get(self._q("#views", TabbedContent).active, "")
+        hint = {"timeline": "w explain · v variables", "overview": "enter opens the selected item",
+                "why": "enter shows evidence · ] [ walk it", "pending": "enter shows evidence · ] [ walk it",
+                "state": "follows the timeline's selection", "tree": "who scheduled whom",
+                "diff": "A = picked recording · B = this one"}.get(active, "")
+        back = "esc back" if self.came_from else ""
+        main.border_subtitle = " · ".join(x for x in (hint, back) if x)
+        self._tab_labels()
+
+    def _tab_labels(self):
+        """Every tab named when the bar has room; otherwise the active one named and the rest by number. The bar
+        always fits, so it never needs scrolling sideways and the current view is always on screen."""
+        views = self._q("#views", TabbedContent)
+        width = views.query_one(ContentTabs).size.width or self._q("#main").size.width
+        full = width >= TAB_FULL_WIDTH
+        for pane, label, key in TABS:
+            tab = views.get_tab(pane)
+            want = tab_label(key, label if full or pane == views.active else None)
+            if str(tab.label) != V.T(want).plain:
+                tab.label = want
+            tab.tooltip = f"{label}  (key {key})"  # a number-only tab still names its view under the mouse
 
     def action_focus_panel(self, name: str):
+        """Focus a panel; for "main", the active view's own list, table, tree or scroll area."""
         if name == "main":
             active = self._q("#views", TabbedContent).active
             target = {"timeline": "#table", "why": "#why-list", "pending": "#pending-list", "tree": "#tree-view",
-                      "diff": "#diff-list", "state": "#state-body", "overview": "#overview-list"}.get(active, "#table")
+                      "diff": "#diff-list", "state": "#state-scroll", "overview": "#overview-list"}.get(active, "#table")
             w = self._q(target)
             if target == "#diff-list" and not self.lists["diff"]:
                 w = self._q("#compare-runs")
-            (w.parent if target == "#state-body" else w).focus()
+            w.focus()
         else:
             self._q({"runs": "#runs", "requests": "#requests", "details": "#details-panel"}[name]).focus()
 
