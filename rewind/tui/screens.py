@@ -63,10 +63,23 @@ class HelpScreen(ModalScreen):
 
 # ---- home --------------------------------------------------------------------------------------
 class HomeScreen(Screen):
-    """Start here: what Rewind is, the one thing to do first (record), the sample, and recent recordings."""
+    """Start here: what Rewind is, the one thing to do first (record), the sample, and recent recordings.
+
+    `back`: Home was opened from an investigation (h), so esc returns to it exactly as it was. On first launch there is
+    nothing to go back to, and esc does nothing rather than open a run the user didn't choose."""
     BINDINGS = [Binding("n", "record", "record a program"), Binding("s", "sample", "try the sample", show=False),
-                Binding("r", "reload", "reload", show=False),
+                Binding("escape", "back", "back", key_display="esc"), Binding("r", "reload", "reload", show=False),
                 Binding("j", "cursor(1)", show=False), Binding("k", "cursor(-1)", show=False)]
+
+    def __init__(self, back: bool = False):
+        super().__init__()
+        self.back = back
+
+    def check_action(self, action: str, parameters) -> bool | None:
+        return self.back if action == "back" else True
+
+    def action_back(self):
+        self.app.pop_screen()
 
     def compose(self) -> ComposeResult:
         yield Static(id="home-top", classes="topbar")
@@ -105,7 +118,8 @@ class HomeScreen(Screen):
         app = self.app
         rows = app.session.rows
         self.query_one("#wordmark", Static).update(V.wordmark(self.size.width or 100))
-        self.query_one("#home-top", Static).update(V.topbar("home", right=f"[dim]recordings in {app.session.home}[/]"))
+        back = "[key]esc[/] [dim]back to the investigation[/]  " if self.back else ""
+        self.query_one("#home-top", Static).update(V.topbar("home", right=f"{back}[dim]recordings in {app.session.home}[/]"))
         recent = self.query_one("#recent", OptionList)
         recent.clear_options()
         intro = self.query_one("#recent-intro", Static)

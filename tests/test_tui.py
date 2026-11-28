@@ -75,6 +75,15 @@ async def press(pilot, *keys):
         await pilot.pause()
 
 
+async def focus_panel(app, pilot, wid: str, key: str = "shift+tab"):
+    """Reach a panel the way a keyboard user does, with tab / shift+tab (at most one full cycle)."""
+    for _ in range(12):
+        if app.focused is not None and app.focused.id == wid:
+            return
+        await press(pilot, key)
+    raise AssertionError(f"{key} never reached #{wid}; stuck at {app.focused}")
+
+
 async def investigate(app, pilot, label="bad"):
     """From Home, open the recording labelled `label` (the newest is highlighted first)."""
     assert isinstance(app.screen, HomeScreen)
@@ -126,7 +135,8 @@ def test_empty_home_offers_recording_and_creates_nothing(tmp_path):
         assert isinstance(app.screen, HomeScreen) and app.theme == "ultraviolet"
         assert app.focused.id == "act-record"  # the first thing to do is focused
         assert not app.screen.query_one("#recent").display
-        await press(pilot, "w", "p", "d", "b", "slash", "right_square_bracket", "f", "e", "t", "3")  # nothing breaks
+        await press(pilot, "w", "4", "7", "b", "slash", "right_square_bracket", "f", "6", "3", "greater_than_sign",
+                    "v", "escape")  # investigation keys do nothing on Home, and nothing breaks
         assert isinstance(app.screen, HomeScreen)
         await press(pilot, "enter")
         assert isinstance(app.screen, RecordScreen) and app.focused.id == "cmd"
@@ -246,7 +256,7 @@ def test_incomplete_recording_is_marked_and_claims_nothing(home):
     async def script(app, pilot):
         await investigate(app, pilot, "held")
         assert not app.pend.complete and "incomplete" in text_of(app.query_one("#topbar"))
-        await press(pilot, "p")
+        await press(pilot, "4")
         assert any("recording incomplete" in f.text for f in app.lists["pending"])
         assert not any(f.level == A.INFERRED for f in app.lists["pending"])
     drive(home, script)
@@ -255,13 +265,15 @@ def test_incomplete_recording_is_marked_and_claims_nothing(home):
 def test_runs_requests_and_timeline_navigation(home):
     async def script(app, pilot):
         await investigate(app, pilot, "bad")
-        await press(pilot, "1")
-        assert app.focused.id == "runs" and app.query_one("#details-panel").border_title == "Recording"
+        await focus_panel(app, pilot, "runs")
+        assert app.query_one("#details-panel").border_title == "Recording"
         await press(pilot, "down", "down")
         assert app.row["label"] == "nowatch"
         await press(pilot, "up", "up")
         assert app.row["label"] == "bad"
-        await press(pilot, "2", "down", "down", "down")  # All, #1, #2, #3
+        await press(pilot, "tab")
+        assert app.focused.id == "requests"
+        await press(pilot, "down", "down", "down")  # All, #1, #2, #3
         assert app.req_filter == 3
         rows = [app.current.by_seq[s] for s in app.shown]
         assert rows and all(app.current.request_of(e.aid if e.kind.startswith("async.") else e.eid) == 3 for e in rows)
@@ -298,7 +310,8 @@ def test_explain_groups_findings_and_walks_evidence(home):
 def test_jumping_widens_filters_only_as_needed(home):
     async def script(app, pilot):
         await investigate(app, pilot, "bad")
-        await press(pilot, "2", "down", "down")  # request #2 only
+        await focus_panel(app, pilot, "requests")
+        await press(pilot, "down", "down")  # request #2 only
         assert app.req_filter == 2
         init = next(e for e in app.current.events if e.kind == "async.init" and app.current.request_of(e.aid) == 3)
         app.jump(init.seq)
@@ -313,16 +326,16 @@ def test_jumping_widens_filters_only_as_needed(home):
 def test_variables_unfinished_and_tree_views(home):
     async def script(app, pilot):
         await investigate(app, pilot, "bad")
-        await press(pilot, "s")  # no event picked yet: the state at the first error
+        await press(pilot, "v")  # no event picked yet: the state at the first error
         assert app.query_one("#views").active == "state"
         from rich.console import Console
         c = Console(width=160, record=True, file=open(os.devnull, "w"))
         c.print(V.state_view(app.current, A.state_at(app.current, app.current.errors[0].seq)))
         text = c.export_text()
         assert "currentCart" in text and "read at seq" in text and '"C-303"' in text
-        await press(pilot, "p")
+        await press(pilot, "4")
         assert any("#3 POST /order arrived" in f.text for f in app.lists["pending"])
-        await press(pilot, "e")
+        await press(pilot, "6")
         assert app.query_one("#tree-view").root.children and app.query_one("#views").active == "tree"
     drive(home, script)
 
@@ -330,7 +343,7 @@ def test_variables_unfinished_and_tree_views(home):
 def test_compare_two_recordings_and_jump_into_either(home):
     async def script(app, pilot):
         await investigate(app, pilot, "bad")
-        await press(pilot, "d")
+        await press(pilot, "7")
         cr = app.query_one("#compare-runs")
         assert app.query_one("#views").active == "diff" and app.focused.id == "compare-runs"
         while cr.get_option_at_index(cr.highlighted).id != "good0000":
@@ -350,9 +363,11 @@ def test_compare_two_recordings_and_jump_into_either(home):
 def test_baseline_key_still_compares(home):
     async def script(app, pilot):
         await investigate(app, pilot, "good")
-        await press(pilot, "b", "1", "up", "up", "up")
+        await press(pilot, "b")
+        await focus_panel(app, pilot, "runs")
+        await press(pilot, "up", "up", "up")
         assert app.row["label"] == "bad" and app.baseline == "good0000"
-        await press(pilot, "d")
+        await press(pilot, "7")  # Compare opens on the comparison with the marked run
         assert app.diff_pair == ("good0000", "bad0000") and app.lists["diff"]
     drive(home, script)
 
@@ -360,8 +375,9 @@ def test_baseline_key_still_compares(home):
 def test_run_without_watch_and_without_errors(home):
     async def script(app, pilot):
         await investigate(app, pilot, "nowatch")
-        await press(pilot, "s")
-        await press(pilot, "1", "down")  # good: no errors
+        await press(pilot, "v")
+        await focus_panel(app, pilot, "runs")
+        await press(pilot, "down")  # good: no errors
         assert app.row["label"] == "good" and app.why_target is None
         await press(pilot, "w")
         assert app.lists["why"] == []
@@ -395,7 +411,7 @@ def test_keyboard_only_journey_from_sample_to_evidence(tmp_path, monkeypatch):
         assert app.row["label"] == "sample" and app.focused.id == "overview-list"
         await press(pilot, "w", "enter")              # Explain, first finding's evidence
         assert app.query_one("#views").active == "timeline" and app.selected_seq() is not None
-        await press(pilot, "o", "t", "p", "s", "e", "d", "question_mark")
+        await press(pilot, "1", "3", "4", "5", "6", "7", "question_mark")
         assert isinstance(app.screen, HelpScreen)
         await press(pilot, "escape", "h")
         assert isinstance(app.screen, HomeScreen)
@@ -423,10 +439,10 @@ def test_layouts_at_terminal_sizes(home, size, cls):
         main = app.screen
         layout = {c for c in ("-narrow", "-compact", "-medium") if main.has_class(c)}
         assert layout == ({cls} if cls else set())
-        await press(pilot, "t")
+        await press(pilot, "3")
         table = app.query_one("#table")
         assert table.size.height >= 3 and table.size.width >= 40
-        await press(pilot, "3", "o", "w", "p", "s", "e", "d", "t")  # every view renders at this size
+        await press(pilot, "1", "2", "4", "5", "6", "7", "3")  # every view renders at this size
         if cls in ("-narrow", "-compact"):
             assert not app.query_one("#details-panel").display
             await press(pilot, "i")

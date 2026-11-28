@@ -117,8 +117,8 @@ Tree > .tree--guides {{ color: {C['line.hi']}; }}
 Tree > .tree--guides-selected {{ color: {C['uv']}; }}
 Tree > .tree--guides-hover {{ color: {C['uv.lo']}; }}
 
-/* tabs: every label is clickable and carries its key; the bar scrolls sideways when labels don't fit
-   (Textual hides the overflow by default), and the active tab is scrolled into view */
+/* tabs: every label is clickable and carries its key (1–7). app._tab_labels() keeps the bar within its width (inactive
+   tabs shrink to their number), so the sideways scrollbar below only ever appears on terminals too narrow even for that */
 TabbedContent {{ height: 1fr; }}
 TabbedContent ContentSwitcher {{ height: 1fr; }}
 TabPane {{ padding: 0; height: 1fr; }}

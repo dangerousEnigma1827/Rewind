@@ -24,20 +24,24 @@ def test_every_view_is_reachable_and_shown_active(home, width):
         await investigate(app, pilot, "bad")
         tabs = app.query_one("#views").query_one("Tabs")
         labels = [str(t.label) for t in tabs.query("Tab")]
-        assert all(any(label.endswith(key) for label in labels) for _, _, key in TABS)  # each label carries its key
+        assert [label.split()[0] for label in labels] == [key for _, _, key in TABS]  # each tab starts with its key
         scroll = tabs.query_one("#tabs-scroll")
-        for pane, _, key in reversed(TABS):                            # far tabs first, by their keys
+        for pane, label, key in reversed(TABS):                       # far tabs first, by their keys
             await press(pilot, key)
             assert app.query_one("#views").active == pane
             active = tabs.query_one("Tab.-active")
+            assert str(active.label) == f"{key} {label}"               # the current view is always named
             assert active.region.x >= scroll.region.x and active.region.right <= scroll.region.right, (width, pane)
+            assert scroll.max_scroll_x == 0, (width, pane)             # the bar fits: nothing to scroll sideways to
         ids = [p for p, _, _ in TABS]
-        await press(pilot, "o")
-        for expected in ids[1:] + ids[:1]:                            # > walks every view and wraps around
+        await press(pilot, "1")
+        for expected in ids[1:]:                                       # > walks every view in order
             await press(pilot, "greater_than_sign")
             assert app.query_one("#views").active == expected
-        await press(pilot, "less_than_sign")
+        await press(pilot, "greater_than_sign")                       # ...and stops at the last one
         assert app.query_one("#views").active == ids[-1]
+        await press(pilot, "less_than_sign")
+        assert app.query_one("#views").active == ids[-2]
     drive(home, script, (width, 34))
 
 
@@ -45,9 +49,9 @@ def test_view_keys_work_while_a_list_in_another_view_has_focus(home):
     # regression: switching views from inside one used to bounce back (focus moved to a hidden sibling list)
     async def script(app, pilot):
         await investigate(app, pilot, "bad")
-        await press(pilot, "d")
+        await press(pilot, "7")
         assert app.focused.id == "compare-runs"
-        await press(pilot, "o")
+        await press(pilot, "1")
         assert app.query_one("#views").active == "overview" and app.focused.id == "overview-list"
     drive(home, script, (120, 34))
 
