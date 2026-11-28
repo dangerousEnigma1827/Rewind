@@ -73,8 +73,7 @@ class HomeScreen(Screen):
         with VerticalScroll(id="home"):
             with Vertical(id="home-col"):
                 yield Static(id="wordmark")
-                yield Static(V.T("[text2]Record your Node.js program once, then find out why it did what it did: which "
-                                 "request an error belonged to, what ran before it, and who changed the data it used.[/]"),
+                yield Static(V.T("[text2]Record a Node.js run once. Then ask [i]why[/i].[/]"),
                              id="tagline")
                 with Vertical(classes="card", id="record-card"):
                     yield Static(V.T("[text2]Start your app the way you normally do, e.g.[/] [text]node server.js[/][text2]. "
