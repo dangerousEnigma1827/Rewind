@@ -74,6 +74,11 @@ def test_why_request_explains_the_response(tmp_path):
     w = rw("why", "bad", "-r", "2", home=tmp_path)
     assert w.returncode == 0 and "response of request #2" in w.stdout
     assert "res.end() was called in Timeout paymentConfirmed" in w.stdout and "path to the response" in w.stdout
+    section = w.stdout.split("path to the response ┈", 1)[1].split("story of request", 1)[0]  # the CLI section
+    assert "#2 arrived" in section and "→ Timeout paymentConfirmed" in section and "↤ res.end()" in section
+    assert "+-" not in w.stdout
+    raw = rw("timeline", "bad", "-k", "http", "--raw", home=tmp_path).stdout
+    assert "res.end() for POST /order" in raw and "sent from Timeout paymentConfirmed" in raw
     crashed = rw("why", "bad", "-r", "3", home=tmp_path)  # #3 crashed before responding
     assert crashed.returncode == 2 and "no recorded response" in crashed.stderr + crashed.stdout
     assert "[bold]" not in crashed.stderr + crashed.stdout

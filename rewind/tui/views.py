@@ -114,7 +114,8 @@ def timeline_cells(run: A.Run, e, width: int) -> tuple[Text, Text, Text, Text, T
     return T(f"[dim]{seq}[/]"), T(f"[dim]{ms}[/]"), T(req), T(glyph), body
 
 
-KIND_WORD = {"http.in": "request arrived", "http.out": "response sent", "http.abort": "client gave up", "log": "log line",
+KIND_WORD = {"http.in": "request arrived", "http.end": "res.end() called", "http.out": "response sent",
+             "http.abort": "client gave up", "log": "log line",
              "mutation": "write to a watched variable", "read": "read of a watched variable",
              "error.uncaught": "uncaught error", "error.logged": "logged error", "run.start": "program started",
              "run.end": "program exited", "run.signal": "stopped by a signal", "snapshot": "watched values at the error",
@@ -168,6 +169,9 @@ def event_detail(run: A.Run, e) -> Group:
         for k in ("status", "ms", "method", "url"):
             if k in d:
                 g.add_row(k, Text(f"{d[k]:.1f}" if k == "ms" else str(d[k])))
+        end = run.requests[d["req"]].end if e.kind == "http.out" and d.get("req") in run.requests else None
+        if end is not None:  # the response's own context is the request; http.end names the callback that sent it
+            g.add_row("sent from", T(escape(run.describe(end.eid))))
     elif e.kind in A.ERROR_KINDS:
         g.add_row("how", Text({"uncaughtException": "uncaught exception", "unhandledRejection": "unhandled promise rejection"}
                               .get((d.get("origin") or ""), "logged with console.error")))

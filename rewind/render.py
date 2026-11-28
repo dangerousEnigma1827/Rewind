@@ -354,7 +354,7 @@ def runs_table(rows, home: str):
 # ---- shared bits for analysis views -------------------------------------------------------------
 
 REQ_TONES = ["r1", "r2", "r3", "r4"]
-GLYPH = {"run.start": "◉", "run.end": "◉", "run.signal": "◉", "http.in": "→", "http.out": "←", "log": "»",
+GLYPH = {"run.start": "◉", "run.end": "◉", "run.signal": "◉", "http.in": "→", "http.end": "↤", "http.out": "←", "log": "»",
          "error.uncaught": "✖", "error.logged": "✖", "mutation": "✎", "mutation.capped": "✎", "async.before": "▸",
          "instrument": "⚙", "read": "◌", "read.capped": "◌"}
 LEVEL = {A.OBSERVED: "[obs]●[/]", A.DERIVED: "[uv]◆[/]", A.INFERRED: "[hyp]?[/]"}
@@ -386,6 +386,8 @@ def event_text(run, e) -> str:
         return f"[mute]watched values at error seq {d.get('error')}:[/] {escape(vals)}"
     if e.kind == "http.abort":
         return f"[err.t]closed before a response[/] {escape(e.name or '')} [mute]{d.get('ms', 0):.1f}ms[/]"
+    if e.kind == "http.end":
+        return f"[mute]res.end() for[/] {escape(e.name or '')}"
     if e.kind in ("async.after", "async.resolve", "async.cancel"):
         return f"[mute]{escape(run.describe(e.aid))}[/]"
     if e.kind == "mutation":
@@ -420,7 +422,7 @@ def context(run, e) -> str:
         r = run.requests.get((e.data or {}).get("req"))
         end = r.end if r else None
         return f"[mute]sent from {escape(run.describe(end.eid))}[/]" if end and end.eid != r.anchor else ""
-    if e.kind.startswith(("run.", "async.")) or e.kind in ("http.in", "http.end", "instrument", "source"):
+    if e.kind.startswith(("run.", "async.")) or e.kind in ("http.in", "instrument", "source"):
         return ""
     return f"[mute]in {escape(run.describe(e.eid))}[/]"
 
@@ -482,6 +484,7 @@ def tree_label(run, n, title_: str) -> str:
     site = run.site(n.aid)
     name = f" [fn]{escape(n.init.name)}[/]" if n.init.name and n.init.name != "<anonymous>" else ""
     where_ = f" [mute]at[/] [loc]{escape(A.where(site))}[/] [mute]in {escape(A.short_fn(site['fn']))}[/]" if site else ""
+    hidden += f" [uv]×{n.repeat}[/]" if n.repeat > 1 else ""
     ran = "" if run.fired.get(n.aid) else " [mute](never ran)[/]"
     err = " [err]✖[/]" if any(e.kind in A.ERROR_KINDS for e in n.events) else ""
     rel = ""
@@ -499,14 +502,13 @@ def tree(run, root, pruned: int, title_: str):
     def label(n) -> str:
         return tree_label(run, n, title_)
 
-    def add(parent, n):
+    t = Tree(label(root), guide_style="mute")
+    stack = [(t, root)]  # iterative: async trees can be deeper than Python's recursion limit
+    while stack:
+        parent, n = stack.pop()
         for e in n.events:
             parent.add(f"[{kind_style(e.kind)}]{GLYPH.get(e.kind, '·')}[/] {event_text(run, e)}")
-        for c in n.children:
-            add(parent.add(label(c)), c)
-
-    t = Tree(label(root), guide_style="mute")
-    add(t, root)
+        stack.extend(reversed([(parent.add(label(c)), c) for c in n.children]))
     console.print(Padding(t, (0, 0, 0, 2)))
     if pruned:
         console.print()
@@ -546,18 +548,22 @@ def why(run, inv, title_: str, evidence: bool, position: str):
     console.print()
     section("findings", LEGEND)
     findings(inv.findings, evidence)
-    hops = run.user_chain(e.eid)
+    hops = run.user_hops(e.eid)
     if hops:
         console.print()
         section("causal chain", "[mute]innermost first[/]")
-        for i, h in enumerate(hops):
+        for i, (h, n) in enumerate(hops):
             arrow = "  " if i == 0 else "[mute]↑ [/]"
             if h.aid in run.anchors:
                 console.print(f"  {arrow}{req_tag(run.anchors[h.aid])} [bold]{escape(run.requests[run.anchors[h.aid]].inbound.name)}[/]")
             else:
                 site = run.site(h.aid)
                 console.print(f"  {arrow}[kind.async]{escape(h.type)}[/]{' [fn]' + escape(h.name) + '[/]' if h.name and h.name != '<anonymous>' else ''}"
-                              f"  [mute]scheduled in[/] {escape(A.short_fn(site['fn']))} [loc]{escape(A.where(site))}[/]")
+                              f"  [mute]scheduled in[/] {escape(A.short_fn(site['fn']))} [loc]{escape(A.where(site))}[/]"
+                              + (f" [uv]×{n}[/]" if n > 1 else ""))
+    responded = run.requests.get((e.data or {}).get("req")) if e.kind in ("http.out", "http.end") else None
+    if responded:
+        response_path(run, responded)
     if inv.branch:
         console.print()
         req = inv.request
@@ -568,6 +574,32 @@ def why(run, inv, title_: str, evidence: bool, position: str):
             rows += [m for m in run.events if m.kind == "mutation" and req.inbound.seq < m.seq < e.seq
                      and run.request_of(m.eid) not in (req.id,) and m.seq not in {r.seq for r in rows}]
         timeline(run, sorted(rows + ([e] if e not in rows else []), key=lambda x: x.seq), show_context=False)
+
+
+def response_path(run, req):
+    """`why` on a response: arrival to res.end(), one step per line, time since arrival on the left."""
+    steps = A.response_path(run, req)
+    if len(steps) < 2:
+        return
+    console.print()
+    section("path to the response", "[mute]→ scheduled  ⇠ awaited  … no link[/]")
+    g = Table.grid(padding=(0, 1))
+    g.add_column(justify="right", style="mute", no_wrap=True)
+    g.add_column(no_wrap=True)
+    g.add_column(ratio=1, overflow="fold")
+    for en in A.path_entries(run, req, steps):
+        arrow = f"[uv]{A.ARROW[en.link]}[/]" if en.link != "unlinked" else "[mute]…[/]"
+        if en.arrival:
+            what = f"{req_tag(req.id) + ' ' if en.what == 'arrived' else ''}[bold]{escape(en.what)}[/]"
+        else:
+            what = f"[kind.async]{escape(en.what)}[/]"
+        extra = "".join([f" [loc]{escape(en.site)}[/]" if en.site else "",
+                         f" [uv]×{en.times}[/]" if en.times > 1 else "",
+                         f" [mute]in[/] {req_tag(en.request)}" if en.request else ""])
+        g.add_row(f"{en.ms:+.1f} ms", arrow, what + extra)  # negative: before this request arrived
+    total = (req.end.t - req.inbound.t) / 1000
+    g.add_row(f"{total:+.1f} ms", f"[{kind_style('http.end')}]{GLYPH['http.end']}[/]", "[mute]res.end()[/]")
+    console.print(Padding(g, (0, 0, 0, 2)), width=width())
 
 
 def pending(rep, title_: str, evidence: bool):

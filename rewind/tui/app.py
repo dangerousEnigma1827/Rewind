@@ -736,13 +736,14 @@ class RewindApp(App):
         tree.root.set_label(V.T(V.R.tree_label(self.current, node, title)))
         tree.root.data = ("aid", node.aid)
 
-        def add(parent, n):
+        stack = [(tree.root, node)]  # iterative: async trees can be deeper than Python's recursion limit
+        while stack:
+            parent, n = stack.pop()
             for e in n.events:
                 parent.add_leaf(V.T(f"[{V.R.kind_style(e.kind)}]{V.R.GLYPH.get(e.kind, '·')}[/] {V.R.event_text(self.current, e)}"),
                                 data=("seq", e.seq))
-            for c in n.children:
-                add(parent.add(V.T(V.R.tree_label(self.current, c, title)), data=("aid", c.aid), expand=True), c)
-        add(tree.root, node)
+            stack.extend(reversed([(parent.add(V.T(V.R.tree_label(self.current, c, title)), data=("aid", c.aid), expand=True), c)
+                                   for c in n.children]))
         tree.root.expand()
         if pruned:
             tree.root.add_leaf(V.T(f"[dim]{pruned} operations with no visible effect hidden[/]"))

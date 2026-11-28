@@ -226,6 +226,7 @@ def test_a_long_await_loop_stays_linear(record, rewind_home):
     root, _ = A.build_tree(run, req.anchor)  # thousands deep: built iteratively, the loop merged into one node
     loop = next(n for n in walk(root) if n.repeat > 1)
     assert loop.repeat == 3000 and looped.seq in {e.seq for e in loop.events}
+    assert "×3000" in render.rich_text(render.tree_label(run, loop, "")).plain
     full, _ = A.build_tree(run, req.anchor, full=True)
     assert max(n.repeat for n in walk(full)) == 1  # --full never merges
     path = A.path_entries(run, req, A.response_path(run, req))
@@ -257,3 +258,15 @@ def test_a_response_path_through_another_request_says_it_depended_on_it(record, 
         m = re.match(r"most of the time \(([\d.]+) of ([\d.]+) ms\)", t)
         assert not m or float(m[1]) <= float(m[2]), t
 
+
+def test_tui_event_detail_names_the_sender(origin):
+    from rich.console import Console
+    from rewind.tui import views as V
+    _, run = origin
+    t = run.requests[req_id(run, "/timer")]
+    con = Console(width=100, record=True, color_system=None)
+    con.print(V.event_detail(run, t.outbound))
+    con.print(V.event_detail(run, t.end))
+    out = con.export_text()
+    assert "sent from" in out and "Timeout later" in out
+    assert "res.end() called" in out and "res.end() for GET /timer" in out
