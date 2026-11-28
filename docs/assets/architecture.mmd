@@ -4,7 +4,7 @@ flowchart LR
     subgraph NODE["Node.js process · records facts"]
         direction TB
         APP["<b>Node.js application</b><br/>your code · HTTP requests · timers · promises · fs I/O"]
-        REC["<b>Recorder</b> (node --require recorder.js)<br/>async_hooks · console · http.Server<br/>uncaughtExceptionMonitor · --watch (opt-in)<br/><i>captures facts, no causal analysis</i>"]
+        REC["<b>Recorder</b> (node --require recorder.js)<br/>async_hooks · console · http.Server · res.end<br/>uncaughtExceptionMonitor · --watch (opt-in)<br/><i>captures facts, no causal analysis</i>"]
         APP -- observed in-process --> REC
     end
 
@@ -13,8 +13,8 @@ flowchart LR
     subgraph PY["Python · interprets"]
         direction TB
         STORE[("<b>Store</b> · rewind/store.py<br/>SQLite (WAL) · .rewind/rewind.db")]
-        ANA["<b>Analysis engine</b> · rewind/analysis.py<br/>async relationships · request attribution<br/>timeline &amp; tree · why · diff"]
-        CLI["<b>Rewind CLI</b><br/>timeline · tree · why · diff"]
+        ANA["<b>Analysis engine</b> · rewind/analysis.py<br/>creation tree · promise settlements · request attribution<br/>timeline &amp; tree · why · response paths · pending · at · diff"]
+        CLI["<b>Rewind CLI and app</b><br/>timeline · tree · why · diff · pending · at · ui"]
         STORE --> ANA --> CLI
     end
 

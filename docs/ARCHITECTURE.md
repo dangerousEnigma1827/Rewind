@@ -5,13 +5,16 @@
  │ app code                                    │
  │ recorder/recorder.js  (node --require)      │
  │   async_hooks · console · http.Server ·     │
- │   uncaughtExceptionMonitor · [--watch AST]  │──► .rewind/runs/<id>.ndjson   (raw, kept)
+ │   res.end · uncaughtExceptionMonitor ·      │
+ │   [--watch AST]                             │──► .rewind/runs/<id>.ndjson   (raw, kept)
  └─────────────────────────────────────────────┘
                           │ process exits
                           ▼
  rewind/store.py   ingest ──► .rewind/rewind.db  (SQLite, WAL)
- rewind/analysis.py         pure functions: Run index, tree, investigate, diff
+ rewind/analysis.py         pure functions: Run index (attribution, promise waits), tree, investigate,
+                            response paths, pending, state_at, diff
  rewind/render.py + cli.py  Typer commands, Rich output
+ rewind/tui/                Textual app over the same analysis
 ```
 
 The Node side only writes facts. All interpretation happens in Python.
@@ -146,7 +149,12 @@ Interaction model:
 - the CLI end to end (`test_cli.py`)
 - presentation: landing screen, help, colour handling, narrow terminals, palette contrast, console-font fallback (`test_render.py`)
 - the interactive app, driven headless with Textual's pilot over real demo recordings: navigation, evidence jumps, diff
-  across runs, empty and incomplete recordings, four terminal sizes, and the real `App.run()` entry point (`test_tui.py`)
+  across runs, empty and incomplete recordings, four terminal sizes, and the real `App.run()` entry point (`test_tui.py`,
+  `test_tui_polish.py`); recording shared by the CLI and the app (`test_recording.py`)
+- causal reconstruction over purpose-built fixtures (`test_causal.py`): the invariant that creation- and trigger-based
+  attribution agree where no promise crosses requests; shared in-flight and settled promises, a mutex hand-off, shared
+  rejections (caught and unhandled), thenable jobs, `http.end` and response paths (including responses ended by
+  another request or by code outside any request), `pending` after `end()` then exit, and a 3000-deep `await` loop
 
 ## Terminal presentation
 

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080" role="img" aria-labelledby="title desc">
   <title id="title">Rewind architecture</title>
-  <desc id="desc">A Node.js application runs with the Rewind recorder preloaded. The recorder writes raw NDJSON events synchronously; the file is kept as ground truth. After the Node process exits, Python ingests it into SQLite (WAL). The analysis engine derives async relationships, request attribution, timeline and tree, why and diff, which the Rewind CLI presents. The Node.js side only records facts; all interpretation happens in Python.</desc>
+  <desc id="desc">A Node.js application runs with the Rewind recorder preloaded. The recorder writes raw NDJSON events synchronously; the file is kept as ground truth. After the Node process exits, Python ingests it into SQLite (WAL). The analysis engine derives async relationships (creating execution, promise settlements), request attribution, timeline and tree, why (errors, waits, responses), pending, state at a point and diff, which the Rewind CLI and the interactive app present. The Node.js side only records facts; all interpretation happens in Python.</desc>
 
   <!-- Palette: edit here. amber = Node / recorded facts, violet = Python / interpretation. -->
   <style>
@@ -68,17 +68,17 @@
   <line class="rule" x1="140" y1="612" x2="660" y2="612"/>
 
   <text x="140" y="652" class="mono code text">async_hooks</text>
-  <text x="414" y="652" class="sans small muted">async resource tree · callbacks</text>
+  <text x="414" y="652" class="sans small muted">async resources · callbacks · settlements</text>
   <text x="140" y="696" class="mono code text">console</text>
   <text x="414" y="696" class="sans small muted">logs · console.error(err)</text>
   <text x="140" y="740" class="mono code text">http.Server</text>
-  <text x="414" y="740" class="sans small muted">one async scope per request</text>
+  <text x="414" y="740" class="sans small muted">one async scope per request · res.end()</text>
   <text x="140" y="784" class="mono code text">uncaughtExceptionMonitor</text>
   <text x="414" y="784" class="sans small muted">uncaught errors · rejections</text>
   <text x="140" y="828" class="mono code text">--watch</text>
   <rect class="pill" x="222" y="811" width="64" height="24" rx="12"/>
   <text x="254" y="828" class="sans amber" font-size="13" text-anchor="middle">opt-in</text>
-  <text x="414" y="828" class="sans small muted">writes to named variables</text>
+  <text x="414" y="828" class="sans small muted">writes and reads of named variables</text>
 
   <line class="rule" x1="140" y1="852" x2="660" y2="852"/>
   <text x="400" y="882" class="sans small amber" text-anchor="middle">Captures execution facts — performs no causal analysis</text>
@@ -135,13 +135,13 @@
   <line class="rule" x1="1240" y1="578" x2="1780" y2="578"/>
 
   <text x="1240" y="618" class="sans body text" font-weight="600">Async relationships</text>
-  <text x="1470" y="618" class="sans small muted">tree from init / trigger ids</text>
+  <text x="1470" y="618" class="sans small muted">creation tree · promise settlements</text>
   <text x="1240" y="656" class="sans body text" font-weight="600">Request attribution</text>
-  <text x="1470" y="656" class="sans small muted">walk trigger links to the request</text>
+  <text x="1470" y="656" class="sans small muted">walk creation links to the request</text>
   <text x="1240" y="694" class="sans body text" font-weight="600">Timeline &amp; tree</text>
   <text x="1470" y="694" class="sans small muted">story events; empty hops folded</text>
-  <text x="1240" y="732" class="sans body text" font-weight="600">Error investigation</text>
-  <text x="1470" y="732" class="sans small muted">observed · derived · inferred</text>
+  <text x="1240" y="732" class="sans body text" font-weight="600">Investigation</text>
+  <text x="1470" y="732" class="sans small muted">errors · waits · responses · graded</text>
   <text x="1240" y="770" class="sans body text" font-weight="600">Execution comparison</text>
   <text x="1470" y="770" class="sans small muted">align runs · first divergence</text>
 
@@ -155,16 +155,22 @@
   <text x="1284" y="932" class="mono muted" font-size="14">cli.py · render.py</text>
 
   <g class="mono" font-size="17" text-anchor="middle">
-    <rect class="chip" x="1448" y="890" width="112" height="38" rx="8"/>
-    <text x="1504" y="915" class="violet">timeline</text>
-    <rect class="chip" x="1572" y="890" width="72" height="38" rx="8"/>
-    <text x="1608" y="915" class="violet">tree</text>
-    <rect class="chip" x="1656" y="890" width="64" height="38" rx="8"/>
-    <text x="1688" y="915" class="violet">why</text>
-    <rect class="chip" x="1732" y="890" width="64" height="38" rx="8"/>
-    <text x="1764" y="915" class="violet">diff</text>
+    <rect class="chip" x="1448" y="866" width="112" height="38" rx="8"/>
+    <text x="1504" y="891" class="violet">timeline</text>
+    <rect class="chip" x="1572" y="866" width="72" height="38" rx="8"/>
+    <text x="1608" y="891" class="violet">tree</text>
+    <rect class="chip" x="1656" y="866" width="64" height="38" rx="8"/>
+    <text x="1688" y="891" class="violet">why</text>
+    <rect class="chip" x="1732" y="866" width="64" height="38" rx="8"/>
+    <text x="1764" y="891" class="violet">diff</text>
+    <rect class="chip" x="1448" y="914" width="112" height="38" rx="8"/>
+    <text x="1504" y="939" class="violet">pending</text>
+    <rect class="chip" x="1572" y="914" width="72" height="38" rx="8"/>
+    <text x="1608" y="939" class="violet">at</text>
+    <rect class="chip" x="1656" y="914" width="140" height="38" rx="8"/>
+    <text x="1726" y="939" class="violet">ui (app)</text>
   </g>
 
   <!-- ===== Footer ===== -->
-  <text x="960" y="1044" class="sans small muted" text-anchor="middle">Storage never drops events; views filter.   ·   Variable writes are recorded only for names passed to --watch.</text>
+  <text x="960" y="1044" class="sans small muted" text-anchor="middle">Storage never drops events; views filter.   ·   Variable writes and reads are recorded only for names passed to --watch.</text>
 </svg>
