@@ -1,0 +1,43 @@
+{
+ "N": "300",
+ "reps": 9,
+ "recording": {
+  "baseline (no recorder)": {
+   "wall_s": 0.591,
+   "min_s": 0.514,
+   "max_s": 0.684,
+   "events": 0,
+   "probe_events": 0
+  },
+  "recorder": {
+   "wall_s": 1.19,
+   "min_s": 0.977,
+   "max_s": 1.854,
+   "events": 104856,
+   "probe_events": 0
+  },
+  "recorder + end probe, no stack": {
+   "wall_s": 1.195,
+   "min_s": 1.046,
+   "max_s": 1.643,
+   "events": 104775,
+   "probe_events": 300
+  },
+  "recorder + end probe + stack": {
+   "wall_s": 1.197,
+   "min_s": 1.061,
+   "max_s": 1.793,
+   "events": 104857,
+   "probe_events": 300
+  }
+ },
+ "analysis": {
+  "events": 104856,
+  "load_and_index_s": 0.394,
+  "attribution via tid": 0.032,
+  "attribution via eid": 0.032,
+  "released-by index (promise reactions)": 0.018,
+  "promise_reaction_runs": 13982,
+  "with_release_edge": 12182
+ }
+}
