@@ -8,9 +8,13 @@
 A stack trace tells you where an exception surfaced. Rewind reconstructs the execution history around it:
 - which request the failing work belonged to
 - which callback scheduled it, and from where
+- what an `await` waited on, and which callback (possibly another request's) settled that promise
+- which callback sent a response, and the path from the request's arrival to `res.end()`
 - what other requests were doing at the same time
 - who last changed the state it used
 - where a failing run first diverged from a good one
+
+It works from a recording of one run. It doesn't replay the program or step backwards through it.
 
 Every statement Rewind makes is labelled as **observed**, **derived** or **inferred**, so you always know how much
 to trust it.
@@ -48,16 +52,18 @@ a debugger.
 ## How Rewind works
 
 <p align="center">
-  <img src="docs/assets/architecture.svg" alt="Rewind architecture: a Node.js process with the recorder preloaded writes raw NDJSON events; after it exits, Python ingests them into SQLite and the analysis engine powers the timeline, tree, why and diff commands." width="100%"/>
+  <img src="docs/assets/architecture.svg" alt="Rewind architecture: a Node.js process with the recorder preloaded writes raw NDJSON events; after it exits, Python ingests them into SQLite and the analysis engine powers the timeline, tree, why, diff, pending and at commands and the interactive app." width="100%"/>
 </p>
 
 **The Node.js side only records facts. All interpretation happens in Python.**
 
 1. **Record.** `rewind record -- node app.js` starts your program with a recorder preloaded
    (`node --require recorder/recorder.js`). You don't change any code. The recorder uses:
-   - `async_hooks` to note every async resource: which one triggered it, and where in your code it was created;
+   - `async_hooks` to note every async resource: the execution that created it, the resource that triggered it,
+     where in your code it was created, when its callback ran, and when a promise settled (and in which callback);
    - `console` to capture logs;
-   - Node's `http` server, so each request gets its own scope (keep-alive included);
+   - Node's `http` server, so each request gets its own scope (keep-alive included), plus the callback that first
+     called `res.end()`;
    - `uncaughtExceptionMonitor` to capture errors without changing crash behaviour or exit codes.
 
    With `--watch VAR`, it also records writes to chosen module-level variables.
@@ -65,12 +71,33 @@ a debugger.
    is kept as ground truth. When the program exits, Python ingests it into SQLite (`.rewind/rewind.db`, WAL mode),
    along with a snapshot of your source files, checked against hashes taken as Node loaded them. Editing the code
    afterwards doesn't change what `why` quotes from an old run.
-3. **Analyse.** Pure Python functions rebuild the async tree from trigger ids and attribute every event to its HTTP
-   request. On top of that, they build the timeline and tree, investigate errors (`why`), and align two runs (`diff`).
-4. **Present.** A Typer + Rich CLI renders the results for terminals of any width, with or without colour.
+3. **Analyse.** Pure Python functions rebuild the async tree from the execution that created each resource and
+   attribute every event to the HTTP request whose code scheduled it. For a callback that resumed after an `await`,
+   they find the promise settlement that released it. On top of that, they build the timeline and tree, investigate
+   errors, events and responses (`why`), report unfinished work (`pending`), reconstruct watched state (`at`), and
+   align two runs (`diff`).
+4. **Present.** A Typer + Rich CLI renders the results for terminals of any width, with or without colour, and a
+   Textual app (`rewind ui`) presents the same analysis interactively.
 
 More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Each design decision was validated by an experiment
-first: [spikes/RESULTS.md](spikes/RESULTS.md).
+first: [spikes/RESULTS.md](spikes/RESULTS.md) (E0–E7) and, for causal reconstruction,
+[spikes/causal/RESULTS.md](spikes/causal/RESULTS.md) (S1–S4).
+
+### Causal reconstruction
+
+Rewind keeps two links per async resource and uses them for different questions:
+- **Created by** (the execution that called `setTimeout`, `then`, `await` or `new Promise`) decides which request a
+  callback belongs to and is the parent in `tree`.
+- **Triggered by** (for a promise continuation, the promise it continues) plus that promise's settlement say what an
+  `await` waited on and which callback settled it.
+
+The two differ when requests share a promise, such as a cached or single-flight fetch. There, request #2's own
+`await` continues a promise request #1 created. Rewind attributes the continuation to #2, because #2's code awaited
+it. It then reports (◆ derived) that #2 waited on work started by #1, and (? inferred) that #2 depends on #1's shared
+work. Earlier versions followed trigger links alone, which moved #2's logs and errors into #1. A promise's
+settlement is recorded without its outcome, so Rewind says "settled", never "resolved" or "rejected". What
+`async_hooks` can't link, such as a listener one request registers and another request's code calls synchronously,
+is never claimed. Details: [docs/handover/FEATURES_AND_LIMITATIONS.md](docs/handover/FEATURES_AND_LIMITATIONS.md#causal-reconstruction-f15).
 
 ---
 
@@ -85,7 +112,9 @@ first: [spikes/RESULTS.md](spikes/RESULTS.md).
 | **Exception correlation** | `rewind why` | uncaught exceptions and unhandled promise rejections (including after `await`) tied back to the callback and request that caused them |
 | **Variable watching** | `rewind record --watch VAR` | every syntactic write to a watched top-level CommonJS variable: location, the request that made it, before/after values |
 | **Execution comparison** | `rewind diff A B` | aligns two runs and reports the first divergence, and whether a step moved (different interleaving) or is new (different code path) |
-| **Unfinished work** | `rewind pending` | each request as completed, failed (5xx), cancelled by the client, or without a response; for the latter, what your code was still waiting on (a promise that never settled, a timer that never ran). Only claimed from a complete recording |
+| **Unfinished work** | `rewind pending` | each request as completed, failed (5xx), cancelled by the client, or without a response; for the latter, what your code was still waiting on (a promise that never settled, a timer that never ran), or that it called `res.end()` but the program ended before the response was sent. Only claimed from a complete recording |
+| **State at a point** | `rewind at RUN SEQ` | each watched variable at any event, from the recorded writes, reads and error snapshots, never assumed |
+| **Interactive app** | `rewind` / `rewind ui` | the same analysis in a full-screen terminal app: record, open a run, follow findings to their evidence, compare runs |
 
 ### Evidence levels
 
@@ -129,21 +158,29 @@ changed the cart, or that $161 is wrong. `rewind why` does:
   ● thrown in applyDiscount at demo/checkout.js:23
   ◆ causal chain: Timeout paymentConfirmed from chargePayment (demo/checkout.js:18) ← FSREQCALLBACK
     from loadCart (demo/checkout.js:9) ← request #3 POST /order
-  ◆ request #4 POST /order was active while #3 POST /order was in flight (arrived, logged,
-    responded, wrote state)
+  ◆ request #4 POST /order was active while #3 POST /order was in flight (arrived, logged, read
+    state, responded, wrote state)
+  ● request #3 POST /order read `currentCart` at demo/checkout.js:23:57 (seq 463), value
+    {"order":"C-303","items":[{"sku":"cable-03","price":12}]}
   ● last write to `currentCart` before this point: `currentCart` = at demo/checkout.js:12:5, new
     value {"order":"C-303","items":[{"sku":"cable-03","price":12}]}
   ◆ that write was made by request #4 POST /order
-  ◆ #3 POST /order set `currentCart` itself (seq 254); request #4 overwrote it (seq 371) before
-    this point (seq 430)
+  ◆ #3 POST /order set `currentCart` itself (seq 262); request #4 overwrote it (seq 400) before
+    this point (seq 464)
+  ◆ #3 POST /order read `currentCart` (seq 463) after request #4's write (seq 400), with no write
+    of its own in between: by the recorded writes, it read request #4's value
   ? likely root cause: a race on shared module-level state. …
 ```
 
 *(An excerpt from one real run. Run ids, `seq` numbers and event counts differ between runs.)*
 
-Two more views complete the story:
-- `rewind why --seq` explains the silent $161 overcharge. ● #2 read `currentCart` at `checkout.js:23` and got
-  B-202's cart. ◆ The last recorded write before that read was request #3's, so #2 read #3's value.- `rewind at bad <seq>` shows `currentCart` at any point in the run, together with the write or read that last
+More views complete the story:
+- `rewind why bad -r 2` explains the silent $161 overcharge through its response. ● `res.end()` was called in the
+  `paymentConfirmed` timer at `checkout.js:36`. ◆ Most of the time between arrival and `end()` passed waiting for
+  that timer. ● #2 read `currentCart` at `checkout.js:23` and got B-202's cart. ◆ The last recorded write before
+  that read was request #3's, so #2 read #3's value. `rewind why --seq` on the A-101 log line gives the same
+  evidence for the log line itself.
+- `rewind at bad <seq>` shows `currentCart` at any point in the run, together with the write or read that last
   recorded its value.
 - `rewind diff good bad` against a sequential run shows the same code path with a different interleaving.
 
@@ -189,6 +226,7 @@ then call `.venv\Scripts\rewind.exe` directly.
 ```sh
 rewind record -l bad -w currentCart -- node demo/traffic.js   # runs the program normally, recorded
 rewind why bad                                                 # the causal story of the crash
+rewind why bad -r 2                                            # who sent request #2's response, and how it got there
 rewind timeline bad                                            # what happened, in order
 rewind record -l good -w currentCart -- node demo/traffic.js --sequential
 rewind diff good bad                                           # where the two executions part ways
@@ -256,7 +294,7 @@ Piped or scripted (no terminal), bare `rewind` prints the landing screen instead
 | `rewind record [-l LABEL] [-w VAR,...] -- node app.js [args]` | runs the program with the recorder preloaded, stores the run, and passes the program's exit code through |
 | `rewind runs` | lists recorded runs, newest first |
 | `rewind timeline [RUN] [-r N] [-k KINDS] [-c] [--raw]` | the run's story; `-r` shows one request, `-k log,http,error,mutation,async,run` filters by kind, `-c` adds every user callback firing, `--raw` shows every recorded event |
-| `rewind tree [RUN] [-r N] [--full]` | the async causality tree; `-r` roots it at a request |
+| `rewind tree [RUN] [-r N] [--full]` | the async causality tree; `-r` roots it at a request; `--full` keeps quiet and internal resources and doesn't merge repeats |
 | `rewind why [RUN] [-e N] [-s SEQ] [-r N] [--evidence]` | investigates error N (default: the first), any event by its seq, or request N's response |
 | `rewind diff A B [--all] [--evidence]` | aligns two runs and finds the first divergence; `--all` includes callbacks outside any request |
 | `rewind pending [RUN] [--evidence]` | requests that never finished and the operations they waited on |
@@ -275,21 +313,24 @@ every option.
 | `REWIND_READS` | `1` | `0` stops recording reads of watched variables (writes are still recorded) |
 | `REWIND_READ_CAP` | `10000` | recorded reads per watched variable, after per-callback deduplication |
 | `NO_COLOR` | unset | any value turns colour off; the layout and the ● ◆ ? marks stay. Piped output never has colour |
+| `REWIND_NO_TUI` | unset | any value makes bare `rewind` print the landing screen even on an interactive terminal |
 
 ---
 
 ## Project structure
 
 ```
-recorder/     Node.js side: recorder.js (async_hooks, console, http, errors, NDJSON output)
+recorder/     Node.js side: recorder.js (async_hooks, console, http incl. res.end, errors, NDJSON output)
               and instrument.js (the --watch AST rewrite; acorn + magic-string, loaded only with --watch)
-rewind/       Python side: store.py (SQLite ingest, run lookup), analysis.py (attribution, tree, why, pending,
-              state, diff), render.py (terminal output), cli.py (Typer commands)
+rewind/       Python side: store.py (SQLite ingest, run lookup), analysis.py (attribution, promise waits,
+              response paths, tree, why, pending, state, diff), recording.py (shared by the CLI and the app),
+              render.py (terminal output), cli.py (Typer commands)
 rewind/tui/   the interactive app: app.py (Textual), views.py (renderables built from analysis results),
-              theme.py (palette and layout CSS)
+              screens.py (home, record, help), theme.py (palette and layout CSS)
 demo/         the Phantom Discount demo: checkout.js, traffic.js, prices.json, fix.patch
 tests/        pytest suite; most tests run real node processes end to end
-spikes/       the feasibility experiments (E0–E7) behind each design decision, with results
+spikes/       the feasibility experiments (E0–E7) behind each design decision, with results; spikes/causal/
+              holds the causal-reconstruction experiments (S1–S4) and their event traces
 docs/         ARCHITECTURE.md, assets/ (the architecture diagram), and handover/: status, engineering log, testing record
 ```
 
@@ -298,18 +339,20 @@ docs/         ARCHITECTURE.md, assets/ (the architecture diagram), and handover/
 ## Testing and verification
 
 ```sh
-pytest        # 102 tests; most run real node processes end to end, the TUI ones drive the app headless
+pytest        # 154 tests; most run real node processes end to end, the TUI ones drive the app headless
 ```
 
 | environment | result |
 |---|---|
-| Windows 11, Python 3.15.2, Node.js 24.22.1 (current branch) | 102 / 102 passed |
+| Windows 11, Python 3.15.2, Node.js 24.22.1 (`feat/causal-reconstruction`) | 154 / 154 passed |
 | Ubuntu 24.04 on WSL2, Python 3.12.3, Node.js 24.22.2 (at 56 tests, before the extended-window work) | 56 / 56 passed |
 
 The TUI was also launched in a real Windows Terminal window on Windows 11 and checked visually.
 
 Also checked:
-- The 39 feasibility checks in `spikes/check.py` pass.
+- The 39 feasibility checks in `spikes/check.py` pass. The 38 causal-reconstruction checks in
+  `spikes/causal/check.py` give 36 pass, 1 ambiguous (a settlement's outcome isn't recorded) and 1 confirmed limit
+  (synchronous listener hand-offs can't be linked).
 - The README install and the Phantom Discount walkthrough were reproduced from fresh clones.
 - Real terminal output was checked in the classic Windows console, Windows Terminal and Linux tmux, at sizes
   down to 40×24 (the landing screen down to 30×12), with colour on and off.
@@ -324,6 +367,18 @@ Also checked:
 Rewind records the **causal skeleton** of a run: async lifecycle, HTTP requests, logs, errors, and watched writes and reads.
 It records execution facts as they happen and analyses them afterwards. It doesn't replay execution or step
 backwards, doesn't capture every function call or variable value, can't set breakpoints, and has no web UI.
+
+**Async causality.** Rewind links what `async_hooks` links, and no more:
+- A callback belongs to the request whose code created it. A listener or callback that one request registers and
+  another request's code invokes synchronously (an `EventEmitter` listener, a callback kept in an array) runs as
+  part of the invoker; nothing records the registration.
+- "Released by" covers promise continuations only: timers, I/O and request handlers start on their own. Node's
+  internal promises (`Promise.all`, `resolve(otherPromise)`, `events.once`, thenables) are followed.
+- A settlement is recorded without its outcome, so Rewind says "settled", never "resolved" or "rejected".
+- The response origin is the first `res.end()` call. Middleware that wraps `res.end` (compression, for example) is
+  recorded where it calls the original. Runs recorded before `http.end` existed report the sender as unknown.
+- Measured only on Node.js 24 on Windows. `for await`, async generators, `AbortSignal`, worker threads, outgoing
+  `fetch` and libraries that manage async context themselves (some database pools) are untested.
 
 **What `--watch` sees.** `--watch currentCart` rewrites CommonJS files as they load, so every *syntactic* write to
 a watched variable declared at the top level of that file is recorded. That covers:
@@ -362,14 +417,12 @@ The AST dependencies load only when `--watch` is used.
   threads and child processes are not instrumented. A child started with `fork()` or `cluster` loads the recorder but
   stays inert, so only the parent is recorded and its recording stays intact.
 - Unhandled rejections are captured only in Node's default `--unhandled-rejections=throw` mode.
-- A promise's settlement is recorded without its outcome, so Rewind says "settled", not "resolved" or "rejected". A
-  listener that one request registers and another request's code calls synchronously runs as part of the caller; no
-  async link records the registration.
 - A run killed with SIGKILL loses up to its last 256 events. Error events are flushed immediately, so they survive,
   and the run is marked `crashed`.
 - Overhead: on a 300-request HTTP benchmark, recording cost about **1.9×** wall time with promise stacks (the
   default) and about **1.1×** without ([spikes/RESULTS.md](spikes/RESULTS.md), E6). That is one synthetic
-  workload, not a general figure.
+  workload, not a general figure. Recording `res.end()` (one event per response) added about 3% on the same
+  workload, inside its run-to-run noise ([spikes/causal/RESULTS.md](spikes/causal/RESULTS.md)).
 - The `why` root-cause line is a heuristic explanation for the shared-state pattern. It isn't a general
   root-cause engine.
 
@@ -382,6 +435,7 @@ The AST dependencies load only when `--watch` is used.
   for `--watch`.
 - **Storage:** newline-delimited JSON, ingested into SQLite (Python standard library, WAL mode).
 - **Analysis and CLI:** Python 3.12+, [Typer](https://typer.tiangolo.com/), [Rich](https://github.com/Textualize/rich).
+- **Interactive app:** [Textual](https://textual.textualize.io/).
 - **Tests:** [pytest](https://pytest.org/), driving real Node.js processes.
 
 ---
