@@ -1,6 +1,6 @@
 # Features and limitations
 
-Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py`. CLI behaviour is covered by the 56-test suite. The M7 fresh-clone walkthrough independently verifies the documented installation and demonstration workflow ([TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md)).
+Back to [HANDOVER.md](HANDOVER.md). Command options come from `rewind/cli.py` (checked against `rewind <command> --help` on 2026-11-28). The 154-test suite covers them. The M7 fresh-clone walkthrough independently verifies the documented installation and demonstration workflow ([TESTING_AND_VERIFICATION.md](TESTING_AND_VERIFICATION.md)).
 
 ## CLI commands
 
@@ -83,6 +83,7 @@ Redesigned on `feat/ultraviolet-tui` for first-time users ([TUI_UX_AUDIT.md](TUI
 - **Completeness first.** A recording is complete only if it reached `run.end`, or a `run.signal` (which flushes every buffered event), and ingest skipped no torn lines. In an incomplete recording, missing events prove nothing: requests without a recorded response are listed with "the recording is incomplete", and no operation or stall is claimed.
 - **Requests:** ● `responded 5xx` (failed); ● the connection closed before a response finished (`http.abort`: cancelled by the client); ◆ arrived but no response was recorded, with the reason taken from how the run ended (uncaught error, signal, or exit code).
 - **Unfinished operations** (complete recordings only, created from user code): ◆ promises with no `async.resolve` (which fires for rejections too), and timers, immediates, ticks and fs callbacks that never fired and weren't cleared (`async.cancel`). Timers report whether they were overdue ("never ran") or "not due yet" (from the recorded delay). Listed for unanswered requests and work outside any request; leftovers of requests that already finished are only counted.
+- **Answered but not sent** (F15): when the request's code called `res.end()` (`http.end`) but no response finished, ● the `end()` call and ? "answered by your code, but the program ended before the response finished sending"; no stall or missing `res.end()` is inferred.
 - **Inference:** ? "likely stalled", naming the most recent unfinished operation the request was waiting on; or, if there was none, a handler that may have returned without responding. Never after an uncaught error: work left unfinished by a crash is a consequence, not a stall.
 - Not judged: other resource types (sockets, DNS, child processes), unref'd timers (they show as "not due yet" or "never ran" like any other), timers cleared by numeric id or by `AbortSignal`, and `timeout.close()`.
 
@@ -103,6 +104,8 @@ For an error it reports, with evidence levels:
 
 Without recorded reads (`REWIND_READS=0`, or runs recorded before F11), a non-error event (`--seq`, e.g. a log showing a wrong total) gets the old story, with the race marked **not proven**.
 Without `--watch` it never claims a mutation: it only suspects module-level state on the failing line and recommends re-recording with `--watch <var>`.
+
+For any target it also reports what its callback waited on and who settled it, the request attribution when trigger links alone would point elsewhere, and for a response (`--seq` on an `http.out`, or `-r N`) who sent it and the path to it: see [Causal reconstruction (F15)](#causal-reconstruction-f15).
 
 Source text comes from the run's snapshot, taken at ingest and checked against SHA-256 hashes the recorder took as Node loaded each CommonJS file. Editing code after recording doesn't change an old run's analysis. A file edited while the program ran is stored as `changed` with no text, and findings that need its source are omitted rather than computed from the edited file. ESM files have no load-time hash and are snapshotted unverified at ingest. Runs ingested before snapshots existed still read the file on disk. Details in [docs/ARCHITECTURE.md](../ARCHITECTURE.md).
 

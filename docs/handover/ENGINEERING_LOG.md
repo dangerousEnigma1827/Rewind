@@ -12,7 +12,7 @@ Evidence labels used below:
 
 ## 1. Commit history
 
-Author dates from `git log`. `main` and `origin/main` are at `0d4cb3d`. `feat/cli-visual-redesign` is 5 commits ahead of `main`, unmerged and unpushed.
+Author dates from `git log`. Rows 1–15 are as of the 2026-11-23 audit, when `main` and `origin/main` were at `0d4cb3d` and `feat/cli-visual-redesign` was 5 commits ahead. The extended-window commits (F2–F14, the TUI) are listed in [PROJECT_STATUS.md](PROJECT_STATUS.md#extended-window-deadline-moved-to-2026-11-28-now-on-originmain). Rows 16–21 are F15 (tests run at the time, not re-run in an audit).
 
 | # | commit | date | message | kind | contents | tests at commit (re-run) |
 |---|---|---|---|---|---|---|
@@ -31,6 +31,12 @@ Author dates from `git log`. `main` and `origin/main` are at `0d4cb3d`. `feat/cl
 | 13 | `49b34bb` | 11-23 12:44 | docs: terminal presentation rules, NO_COLOR, test count | docs | README, `docs/ARCHITECTURE.md`, handover | 51 / 51 (docs only) |
 | 14 | `b903d1e` | 11-23 12:58 | style: add prominent Rewind terminal wordmark | redesign | `render.py` wordmark, narrow landing layout | 52 / 52 |
 | 15 | `6320276` | 11-23 13:18 | fix: landing screen fits 80x24 and switches at a real 45 columns | compatibility fix | `render.py`, tests, compatibility matrix | 54 / 54 |
+| 16 | `ce31f1c` | 11-28 | spikes: causal reconstruction experiments S1-S4 | experiments | `spikes/causal/` | 130 / 130 (+38 spike checks) |
+| 17 | `5692216` | 11-28 | F15: causal reconstruction across shared promises, and who sent a response | feature | `analysis.py`, `recorder.js` (`http.end`), `cli.py` (`why -r`), `render.py`, `test_causal.py`, fixtures, docs | 146 / 146 |
+| 18 | `7b7a8fa` | 11-28 | spikes/causal: keep the checks valid against the F15 recorder | experiments | `spikes/causal/` | spikes 38 checks |
+| 19 | `4618971` | 11-28 | F15 polish: stricter release edges, rejections, pending, deep chains | fix | `analysis.py`, `test_causal.py`, fixtures | 90 / 90 (causal, analysis, render, TUI files at that commit) |
+| 20 | `9a40d15` | 11-28 | F15 polish: response path section, http.end wording, deep trees in views | presentation | `render.py`, `tui/app.py`, `tui/views.py`, tests | 154 / 154 |
+| 21 | `1925dd2` | 11-28 | docs: F15 polish - release rules, rejections, pending, deep chains | docs | docs | 154 / 154 (docs only) |
 
 ## 2. Milestones
 
@@ -85,7 +91,7 @@ Author dates from `git log`. `main` and `origin/main` are at `0d4cb3d`. `feat/cl
 - **Decisions** (commit msg):
   - `investigate()` emits Findings tagged observed, derived or inferred, each citing the event seqs behind it.
   - Without `--watch` it only suspects shared state.
-  - On a non-error event (`--seq`), a race is marked unproven because reads are not recorded.
+  - On a non-error event (`--seq`), a race is marked unproven because reads are not recorded. (Since F11 reads of watched variables are recorded, and this holds only with `REWIND_READS=0` or older runs.)
   - Tests assert evidence-integrity invariants.
 - **Files:** `rewind/analysis.py`, `cli.py`, `render.py`, `tests/test_analysis.py`, `tests/test_cli.py`.
 - **Tests:** re-run 36/36.
@@ -160,6 +166,17 @@ Seven handover files, written without running anything; the claims were checked 
   - Details: [compatibility matrix](TESTING_AND_VERIFICATION.md#terminal-compatibility-matrix-2026-11-23-branch-featcli-visual-redesign).
 - **Bugs:** [B9](#b9-wordmark-switch-used-the-wrong-width-outside-legacy-windows), [B10](#b10-landing-screen-too-tall-for-8024). Also found a README gap on Ubuntu ([B17](#b17-readme-install-on-ubuntu)).
 - **Tests:** 2 new. 54/54 on Windows and on Linux.
+
+### F15 — Async causal reconstruction (`ce31f1c` … `1925dd2`)
+- **Objective:** reconstruct which request a callback belongs to, what an `await` waited on and who settled it, and which callback sent a response, without claiming links `async_hooks` can't establish.
+- **Experiments first** (`spikes/causal/`, 38 checks): promise settlement timing (adoption, `Promise.all`/`race`, rejection, thenables, already-settled promises), `async.init.eid` against `executionAsyncId()` in 8 contexts, shared patterns across requests, `res.end()` call context, overhead. Verdicts: 36 PASS, 1 AMBIGUOUS (a settlement's outcome isn't recorded), 1 LIMIT (synchronous listener hand-offs).
+- **Decisions:**
+  - attribution follows the creating execution (`init.eid`, falling back to `tid` where `eid` is 0); the invariant that both models agree on every pre-existing fixture is a test
+  - "released by" covers promise reactions only, first run only, through Node's internal promises; a hop that didn't wait ends the chain
+  - wording is "settled", never "resolved"/"rejected"
+  - one new recorder event, `http.end` (first `res.end()` call)
+- **Bugs:** [B18](#b18-trigger-only-attribution-moved-work-between-requests), [B19](#b19-a-thenable-job-reported-as-a-wait-that-didnt-happen), [B20](#b20-pending-inferred-a-stall-after-res-end), [B21](#b21-tree-recursion-limit-on-deep-await-chains), [B22](#b22-quadratic-release-chains-on-await-loops).
+- **Tests:** 24 new (130 → 154). Recorder cost of `http.end`: +3% median on the E6 load, inside its noise.
 
 ## 3. Bug-fix and verification record
 
@@ -355,6 +372,45 @@ Root cause labels: **confirmed** = demonstrated (reproduced, and the fix made th
 3. **Fix:** README note (`python3`, `sudo apt install python3-venv`).
 4. **Commit:** `6320276`.
 5. **Caveat:** the documented `apt` route itself was not run (no sudo). The Linux test run used `venv --without-pip` and pip run from its wheel instead.
+
+<a id="b18-trigger-only-attribution-moved-work-between-requests"></a>
+### B18. Trigger-only attribution moved work between requests
+1. **Observed** (reproduced, spike S3): with a memoised promise shared by two requests, `timeline -r 2` and `tree -r 2` omitted request #2's own log, and a shared rejection's logged error in #2 was attributed to #1. A plain cache hit, long after the promise settled, did the same.
+2. **Root cause (confirmed):** `request_of` walked `triggerAsyncId`. For an `await` continuation that is the awaited promise, created by the first request.
+3. **Fix:** walk the creating execution (`init.eid`); keep the trigger walk to report disagreement.
+4. **Tests:** `test_shared_in_flight_promise_keeps_each_requests_work_in_that_request`, `test_a_cache_hit_on_a_settled_promise_is_not_called_a_wait`, `test_a_shared_rejection_is_the_failing_requests_error_with_an_inherited_cause`, and the invariant `test_both_attribution_models_agree_where_no_promise_crosses_requests`.
+5. **Commit:** `5692216`.
+
+<a id="b19-a-thenable-job-reported-as-a-wait-that-didnt-happen"></a>
+### B19. A thenable job reported as a wait that didn't happen
+1. **Observed** (reproduced): a `then` callback returning a non-native thenable; `why` on a log inside the thenable's `then()` said it "awaited … which had already settled".
+2. **Root cause (confirmed):** Node runs the thenable job as a second run of the same reaction's asyncId; the release rule looked at any run.
+3. **Fix:** only a reaction's first run is released, and only PROMISEs whose trigger differs from their creator count as reactions.
+4. **Tests:** `test_a_thenable_job_is_not_reported_as_released`, `test_new_promises_are_not_reactions`.
+5. **Commit:** `4618971`.
+
+<a id="b20-pending-inferred-a-stall-after-res-end"></a>
+### B20. `pending` inferred a stall after `res.end()`
+1. **Observed** (reproduced): a handler that called `res.end()` and then `process.exit(0)` was reported without a response and, by inference, as a handler that "may have returned without sending a response".
+2. **Root cause (confirmed):** `pending` didn't know `end()` had been called; `http.end` now records it.
+3. **Fix:** ● the `end()` call, ? "answered by your code, but the program ended before the response finished sending"; no stall inference.
+4. **Test:** `test_pending_knows_the_handler_answered_when_end_was_called`.
+5. **Commit:** `4618971`.
+
+<a id="b21-tree-recursion-limit-on-deep-await-chains"></a>
+### B21. `tree` hit the recursion limit on deep `await` chains
+1. **Observed** (reproduced): `rewind tree -r 1` on a request awaiting 3000 times in a loop raised `RecursionError`. Present before F15 too: the trigger chain was as deep.
+2. **Fix:** `build_tree`, `render.tree` and the TUI tree are iterative; a chain of identical resources merges into one `×N` node (not with `--full`). `why`'s causal chain and the response path merge repeats the same way (4221 lines of output became 22).
+3. **Test:** `test_a_long_await_loop_stays_linear`.
+4. **Commits:** `4618971`, `9a40d15`.
+
+<a id="b22-quadratic-release-chains-on-await-loops"></a>
+### B22. Quadratic release chains on `await` loops
+1. **Observed** (profiled): `why -r 1` on the same loop took 4.4 s, almost all in `release_chain`.
+2. **Root cause (confirmed):** the chain kept walking past hops that hadn't waited, so every step re-walked the loop; attribution walks also cached only their start.
+3. **Fix:** a hop that didn't wait ends the chain; every resource on an attribution walk is cached; `ancestors()` is lazy. 0.7 s after.
+4. **Test:** `test_a_long_await_loop_stays_linear` (cache filled in one walk).
+5. **Commit:** `4618971`.
 
 ### Smaller issues caught during the redesign, before committing
 Recorded in this session only; none of these was ever committed:

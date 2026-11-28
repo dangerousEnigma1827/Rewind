@@ -13,10 +13,13 @@ rewind/                     repo root
 │  └─ package-lock.json
 ├─ rewind/                  Python package (installed editable)
 │  ├─ __init__.py           RECORDER path
-│  ├─ cli.py                Typer commands: record runs timeline tree why diff; landing/help hooks
-│  ├─ store.py              REWIND_HOME, SQLite schema, ingest, resolve
-│  ├─ analysis.py           Run indexes, tree, investigate (why), diff
-│  └─ render.py             Rich theme and views
+│  ├─ cli.py                Typer commands: record runs timeline tree why diff pending at ui; landing/help hooks
+│  ├─ recording.py          prepare/store a recording (shared by `rewind record` and the app)
+│  ├─ store.py              REWIND_HOME, SQLite schema, ingest, source snapshots, resolve
+│  ├─ analysis.py           Run indexes (attribution, promise waits), tree, investigate (why), response paths,
+│  │                        pending, state_at, diff
+│  ├─ render.py             Rich theme and views
+│  └─ tui/                  the Textual app: app.py, views.py, screens.py, theme.py, scrollbar.py
 ├─ demo/
 │  ├─ checkout.js           Phantom Discount service (bug: module-level currentCart)
 │  ├─ traffic.js            starts it, sends /health + 3 orders; --sequential
@@ -25,8 +28,9 @@ rewind/                     repo root
 ├─ tests/
 │  ├─ conftest.py           record / rewind_home fixtures
 │  ├─ fixtures/*.js|.mjs    small Node programs with known causality
-│  └─ test_{recorder,store,analysis,cli,render}.py
+│  └─ test_{recorder,store,analysis,causal,cli,render,recording,tui,tui_polish}.py
 ├─ spikes/                  M0 experiments + RESULTS.md (evidence, not shipped)
+│  └─ causal/               F15 experiments S1–S4: check.py, bench.py, RESULTS.md, sequences.md
 ├─ docs/ARCHITECTURE.md     concise architecture
 ├─ docs/handover/           this handover set
 ├─ pyproject.toml           typer>=0.12, rich>=13, textual>=8.2 (the TUI); dev: pytest>=8; script `rewind`
@@ -86,7 +90,11 @@ rewind runs
 rewind timeline myrun -k log,http,error
 rewind tree myrun -r 2
 rewind why myrun --evidence
+rewind why myrun -r 2                          # who sent request #2's response, and the path to it
+rewind pending myrun
+rewind at myrun 120                            # watched state at seq 120
 rewind diff good bad
+rewind                                         # the interactive app (or rewind ui)
 ```
 
 `-N` run refs (`rewind why -1`, `rewind diff -2 -1`) work since M7; before that Click rejected them as unknown options.
@@ -105,6 +113,7 @@ rewind record -l bad -w currentCart -- node demo/traffic.js
 rewind timeline bad                                        # 3 interleaved orders, 3 writes; "A-101: charged $161" (should be $128)
 rewind why bad                                             # thrown in applyDiscount; request #3 (B-202); overwritten by #4
 rewind why bad --seq <seq of the A-101 log line>           # silent overcharge: #2's read of #3's cart (with REWIND_READS=0: not proven)
+rewind why bad -r 2                                        # A-101's response: sent from paymentConfirmed, the path, the same read evidence
 rewind record -l nowatch -- node demo/traffic.js
 rewind why nowatch                                         # suspects shared state, recommends --watch
 rewind record -l good -w currentCart -- node demo/traffic.js --sequential
@@ -130,6 +139,7 @@ rewind ui                # the app itself; needs a real terminal (bare `rewind` 
 Run from the repo root with the venv active and `node` on PATH. Tests set their own `REWIND_HOME` in temp dirs. `--watch` tests need `recorder/node_modules`.
 
 M0 spikes (evidence only): `.venv\Scripts\python spikes\check.py`, `spikes\e5_sqlite.py`, `spikes\e6_bench.py` (spikes have their own `spikes/package.json`).
+F15 spikes: `.venv\Scripts\python spikes\causal\check.py` (38 checks; rewrites `check_results.json` and `sequences.md`, whose asyncIds vary from run to run) and `spikes\causal\bench.py`. They use the production recorder and need `recorder/node_modules`.
 
 ## Environment variables
 
@@ -138,7 +148,10 @@ M0 spikes (evidence only): `.venv\Scripts\python spikes\check.py`, `spikes\e5_sq
 | `REWIND_HOME` | user | `./.rewind` | database and raw recordings |
 | `REWIND_PROMISE_STACKS` | user | `1` | `0` skips promise creation stacks (~1.9× → 1.1× overhead; loses async fn names) |
 | `REWIND_MUT_CAP` | user | `10000` | recorded writes per watched variable |
+| `REWIND_READS` | user | `1` | `0` stops recording reads of watched variables |
+| `REWIND_READ_CAP` | user | `10000` | recorded reads per watched variable, after per-callback dedupe |
 | `NO_COLOR` | user | unset | any value turns colour off; layout and ● ◆ ? stay (piped output never has colour) |
+| `REWIND_NO_TUI` | user | unset | any value: bare `rewind` prints the landing screen even on a terminal |
 | `REWIND_OUT` | `rewind record` | — | NDJSON output path; recorder is inert without it |
 | `REWIND_RUN_ID` | `rewind record` | — | run id written into `run.start` |
 | `REWIND_WATCH` | `rewind record -w` | — | comma list of watched names |

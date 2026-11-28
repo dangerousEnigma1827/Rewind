@@ -1,13 +1,13 @@
 # Architecture (handover edition)
 
 Expands [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), which remains the concise reference. Back to [HANDOVER.md](HANDOVER.md).
-Sources: existing docs, `spikes/RESULTS.md`, and a partial read of the source (`rewind/cli.py` record path, env vars in `recorder/recorder.js`, `store.home()`); internals not read line by line are as described by the earlier docs. Nothing was executed.
+Sources: existing docs, `spikes/RESULTS.md`, and a partial read of the source (`rewind/cli.py` record path, env vars in `recorder/recorder.js`, `store.home()`); internals not read line by line are as described by the earlier docs. Nothing was executed. Updated 2026-11-28 for F15 against `rewind/recording.py`, `rewind/analysis.py` and `recorder/recorder.js` (read, and the record path executed by the test suite).
 
 ## Complete data flow
 
 ```
-rewind record [-l LABEL] [-w VAR,...] -- node app.js args
-   │  rewind/cli.py:record
+rewind record [-l LABEL] [-w VAR,...] -- node app.js args      (or Record in the app)
+   │  rewind/cli.py:record → rewind/recording.py:prepare / store_run (shared with the TUI)
    │   • run_id = 8 hex chars (secrets.token_hex(4))
    │   • raw path = $REWIND_HOME/runs/<run_id>.ndjson   (REWIND_HOME default ./.rewind)
    │   • env: REWIND_OUT, REWIND_RUN_ID, [REWIND_WATCH]
@@ -15,7 +15,8 @@ rewind record [-l LABEL] [-w VAR,...] -- node app.js args
    ▼
 ┌──────────── node process ─────────────────────────────┐
 │ recorder/recorder.js                                  │
-│   async_hooks · console patch · http.Server patch ·   │
+│   async_hooks · console patch · http.Server patch     │
+│   (per-request scope, res.end) ·                      │
 │   uncaughtExceptionMonitor · signal/exit flush        │
 │   [--watch] recorder/instrument.js rewrites CJS files │
 │   buffer → fs.writeSync NDJSON lines                  │──► $REWIND_HOME/runs/<id>.ndjson  (kept)
@@ -25,12 +26,13 @@ rewind record [-l LABEL] [-w VAR,...] -- node app.js args
 rewind/store.py: ingest(db, run_id, raw, label, cmd, started_at, ended_at, exit_code)
    │ one transaction → $REWIND_HOME/rewind.db (SQLite, WAL)
    ▼
-rewind/analysis.py: Run indexes → story / tree / investigate (why) / diff     (pure functions)
+rewind/analysis.py: Run indexes → story / tree / investigate (why) / response paths / pending /
+                    state_at / diff     (pure functions)
    ▼
-rewind/render.py (Rich) ← rewind/cli.py (Typer)  → terminal
+rewind/render.py (Rich) ← rewind/cli.py (Typer)  → terminal;  rewind/tui/ (Textual) → the app
 ```
 
-`rewind record` exits with the child's exit code. If the recorder produced no file, it fails with "recorder produced no output". If `node` is not on PATH it exits 127. Ctrl+C is forwarded (the child gets it too, flushes, exits).
+`rewind record` exits with the child's exit code. If the recorder produced no file, it fails with "recorder produced no output (did node start?)". If `node` is not on PATH it exits 127. Ctrl+C is forwarded (the child gets it too, flushes, exits).
 
 ## 1. Node.js recorder (`recorder/recorder.js`)
 
@@ -85,7 +87,7 @@ One JSON object per line. Fields:
 |---|---|
 | `seq` | total order within the run (contiguous) |
 | `t` | µs since recorder start |
-| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `log` `http.in` `http.end` `http.out` `error.uncaught` `error.logged` `mutation` `mutation.capped` `instrument` |
+| `kind` | `run.start` `run.end` `run.signal` `async.init` `async.before` `async.after` `async.resolve` `async.cancel` `log` `http.in` `http.end` `http.out` `http.abort` `error.uncaught` `error.logged` `mutation` `mutation.capped` `read` `read.capped` `instrument` `source` `snapshot` |
 | `eid` | executionAsyncId at emission |
 | `aid`, `tid` | resource id and trigger id (async events; `http.in` anchors) |
 | `type`, `name` | resource type and callback name; or log text, request line, error message, variable name |
@@ -101,27 +103,33 @@ The raw file is kept after ingest as ground truth and is readable even after a h
 - `ingest()` loads a run in a single transaction. Tables:
   - `runs`: one row per run — id, label, cmd, cwd, node version, timestamps, exit code, status (`ok` / `failed` / `crashed`), event and error counts, raw path.
   - `events`: mirrors the NDJSON fields, primary key `(run_id, seq)`, indexed on `aid` and `kind`.
+  - `sources` (text by SHA-256) and `run_sources(run_id, path, sha256, status)`: the source files as they ran (F2), status `verified` / `unverified` / `changed` / `missing`; see [docs/ARCHITECTURE.md](../ARCHITECTURE.md#event-schema).
 - Status: `crashed` when the stream has no `run.end` (e.g. SIGKILL); `failed` on non-zero exit; `ok` otherwise (tests `test_status_classification`, `test_killed_run_is_crashed_and_torn_line_skipped`).
 - Re-ingesting the same run id replaces rather than duplicates (`test_reingest_replaces_not_duplicates`).
 - `resolve(db, ref)`: run reference = label, id prefix, `last` (default), or `-N` (Nth newest). Unknown ref → `RunNotFound` → CLI exits 2 with a friendly message.
 
 ## 6. Analysis engine (`rewind/analysis.py`)
 
-`analysis.Run` builds indexes once per run: `inits`, `children`, `fired`, `emitted` (story events per eid), `requests` / `anchors`, and cached `story`, `errors`, `effectful`.
+`analysis.Run` builds indexes once per run: `inits`, `children` (by creating execution), `fired`, `resolves`, `emitted` (story events per eid), `requests` / `anchors` (each request with its `http.end`), and cached `story`, `errors`, `effectful`.
 
+- **Attribution and waits** (F15): `request_of` follows creation links; `trigger_request_of` keeps the old trigger walk for reporting disagreement; `released` / `release_chain` find the settlement that released a promise continuation; `settled_by` gives a promise's own settlement (for unhandled rejections). Rules and limits: [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md#causal-reconstruction-f15), formal detail in [docs/ARCHITECTURE.md](../ARCHITECTURE.md#analysis).
 - **Collapsing**: hops without a user frame (e.g. the 4 `FSREQCALLBACK` open/stat/read/close hops inside `fs.readFile`) are folded in views, kept in storage. Function names normalised (`Timeout.stepB` → `stepB`; `short_fn`).
-- **Tree**: prunes branches with no story events and reports how many it hid; `--full` shows everything.
+- **Tree**: parent = the creating execution; prunes branches with no story events and reports how many it hid; merges a chain of identical resources (an `await` in a loop) into one `×N` node; `--full` shows everything. Built iteratively.
 - **`investigate(run, event)`** — `why`. Returns findings `(level, text, evidence seqs)`:
   - throw site and running callback with its creation site — *observed*
   - collapsed causal chain to the owning request; other requests' observable activity while it was in flight — *derived*
   - per watched variable: whether the failing source line reads it (derived), the last write (observed) and its writer request (derived), and own-write → foreign-overwrite → target ordering (derived)
   - race explanation — *inferred*, always citing the seqs above
   - Without `--watch`: may only point at module-level names on the failing line and recommend `--watch`; never claims a write. With recorded reads (F11), the race rests on an observed `read` and the last recorded write before it (derived); reads that came before the overwrite, or no read at all, rule the race out of the inference. Without reads (`REWIND_READS=0`, older runs), a race on a non-error event is labelled not proven.
+  - for an uncaught error with `--watch`: each watched value at the throw (observed, F12) and an unrecorded change when it differs from the last whole-variable write (derived)
+  - for a promise continuation: the settlement it waited for (observed), that it waited and how long, or that the promise had already settled (derived), the settling callback's request when it is another one (derived), and the dependency on that request's shared work (inferred); for an unhandled rejection, who settled the rejected promise and where the rejection started
+  - for a response (`http.out`, `why -r N`): the callback that called `res.end()` (observed), another request's or no request's code ending it (derived), and the path from arrival to `end()` with timings and the largest gap (derived)
+- **`pending(run)`** and **`state_at(run, seq)`** (`rewind pending`, `rewind at`): see [docs/ARCHITECTURE.md](../ARCHITECTURE.md#analysis). `pending` reports a request whose code called `res.end()` but never finished sending as answered, not stalled.
 - **`diff(a, b)`**: tokenises each run into request-tagged steps with ids/times removed — effectful callback firings (site + description), requests, logs, writes (location + op, not values), errors, exit. Callbacks with no observable effect are excluded (Node's HTTP date-cache timer fires nondeterministically). Aligns with `difflib.SequenceMatcher`; reports first divergence, whether the divergent step merely moved, and reordered / only-A / only-B counts. Writes watched in only one of the two runs are ignored (`test_diff_ignores_writes_watched_in_only_one_run`).
 - Test invariants: every inference cites evidence, every evidence seq exists, every observed "write" claim is backed by a `mutation` event.
 
 ## 7. CLI and rendering
 
-- `rewind/cli.py`: Typer app, entry point `rewind = rewind.cli:main` (pyproject). Commands: `record`, `runs`, `timeline`, `tree`, `why`, `diff` — details in [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md).
+- `rewind/cli.py`: Typer app, entry point `rewind = rewind.cli:main` (pyproject). Commands: `record`, `runs`, `timeline`, `tree`, `why`, `diff`, `pending`, `at`, `ui` — details in [FEATURES_AND_LIMITATIONS.md](FEATURES_AND_LIMITATIONS.md). The interactive app lives in `rewind/tui/` ([docs/ARCHITECTURE.md](../ARCHITECTURE.md#interactive-app-rewindtui)).
 - `rewind/render.py`: Rich console and the "Ultraviolet" theme, markers `●` observed, `◆` derived, `?` inferred; `--evidence` prints backing seqs. Also the landing screen, per-command help, usage errors and the classic-console glyph fallback. Design rules: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md#terminal-presentation).
 - `rewind/__init__.py` exports `RECORDER`, the absolute path of `recorder/recorder.js` (the package is installed editable, so the recorder is found in the repo).

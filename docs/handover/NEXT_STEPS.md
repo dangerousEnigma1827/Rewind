@@ -1,10 +1,13 @@
 # Next steps
 
-Back to [HANDOVER.md](HANDOVER.md). Nothing beyond M7 was approved until 2026-11-27. With the deadline extended to 2026-11-28, the user approved work in parts: Part 1 (F2, F3) and Part 2 (F5, F12) are done on `feat/recording-reliability` ([PROJECT_STATUS.md](PROJECT_STATUS.md#extended-window-deadline-moved-to-2026-11-28-branch-featrecording-reliability-not-merged)). Parts 3 and 4 are not started and need the user's go-ahead.
+Back to [HANDOVER.md](HANDOVER.md). Nothing beyond M7 was approved until 2026-11-27. With the deadline extended to 2026-11-28, the user approved work in parts; all of it (F2, F3, F5, F11, F12, F14, the TUI and its polish) is now on `origin/main` (`bbd4eb5`). Async causal reconstruction (F15) followed on `feat/causal-reconstruction` ([PROJECT_STATUS.md](PROJECT_STATUS.md#async-causal-reconstruction-f15-branch-featcausal-reconstruction)).
 
-## Open after Parts 1–4
+## Open
 
-- **Review and merge, in order:** `feat/recording-reliability` → `feat/watched-state` → `feat/rewind-tui` → `feat/ultraviolet-tui` → `feat/tui-visual-polish` (the visual pass, [TUI_VISUAL_POLISH.md](TUI_VISUAL_POLISH.md)). `feat/ultraviolet-tui` is the first-run TUI redesign ([TUI_UX_AUDIT.md](TUI_UX_AUDIT.md)), which records from inside the app. Each branches from the previous one, none is pushed, and `main` is untouched. Re-rehearse the demo from the merged `main`. Its steps are unchanged, but `why --seq` on A-101 now derives #2's read of #3's cart instead of "not proven". `rewind pending`, `rewind at` and the app (`rewind`) are new.
+- **Integrate F15:** fast-forward `main` to `feat/causal-reconstruction` (local `main` already holds the spike commit `ce31f1c`), re-run the suite, push. The user decides when.
+- **Website:** `rewind-cli` is built from captures of `388fe45` and predates F2–F15 and the app. It needs a re-capture from a clean checkout of the integrated `main` plus copy changes; the change list is kept outside this repo.
+- **Re-rehearse the demo** from the integrated `main`. Its steps are unchanged; `why --seq` on A-101 derives #2's read of #3's cart, and `why bad -r 2` explains A-101's response. `rewind pending`, `rewind at` and the app (`rewind`) are new since M7.
+- **F15 verification gaps:** Node 20/22, Linux, macOS; `for await`, async generators, `AbortSignal`, worker threads, outgoing `fetch`, libraries with their own async context.
 - **Not verified:** Linux, macOS, Node 20/22. The TUI hasn't been checked in the classic PowerShell 5.1 console (conhost), only Windows Terminal. The new CLI views haven't been checked in PowerShell 5.1 either.
 - **Landing screen:** `pending` and `at` are missing from the landing screen, which is exactly at its 80×24 limit (B10). The app lists every view.
 - **Large runs:** the TUI loads runs synchronously. Very large runs would freeze it briefly; a worker plus a loading state would fix that.
@@ -12,7 +15,7 @@ Back to [HANDOVER.md](HANDOVER.md). Nothing beyond M7 was approved until 2026-11
 ## What remains
 
 1. ~~Review and merge `feat/cli-visual-redesign`~~ **Done:** merged into `main` as PR #1 (`388fe45`).
-2. **Rehearse the 7-step demo 3× and record a backup video.** User tasks left open since M7. Rehearse from `main`, which now includes the redesign.
+2. **Rehearse the 7-step demo 3× and record a backup video.** User tasks left open since M7. Rehearse from `main` once F15 is integrated.
 3. **Optional verification gaps** if they matter for judging: macOS, Python 3.13/3.14, Node 20/22. See [PROJECT_STATUS.md](PROJECT_STATUS.md#not-verified).
 
 ## M7 checklist (completed 2026-11-23)

@@ -2,9 +2,36 @@
 
 Back to [HANDOVER.md](HANDOVER.md). The test suite, the test-count history, the M0 experiments, M7 fresh-clone verification, and the terminal compatibility matrix. Bugs found in testing, with root causes and fixes, are in [ENGINEERING_LOG.md](ENGINEERING_LOG.md#3-bug-fix-and-verification-record).
 
-**Latest result:** 154 / 154 on `feat/causal-reconstruction` after the polish pass (`test_causal.py` gains 8: thenable jobs get no release edge, new promises aren't reactions, an unhandled rejection names who rejected it, `pending` after `end()` then exit, a 3000-deep `await` loop stays linear and its tree merges to `×3000`, a response sent by code outside any request, a response path through another request, the TUI event detail; fixtures `thenable_job.js`, `unhandled_shared.js`, `end_then_exit.js`, `await_loop.js`, `flush_queue.js`). Before that, 146 / 146 (adds `test_cli.py::test_why_request_explains_the_response` and `test_causal.py`: 15 items, from 11 functions with one parametrized ×5: the attribution invariant on 5 pre-existing recordings, shared in-flight and settled promises, a mutex hand-off, a shared rejection, `http.end` recording, response explanations and the response path, a response ended by another request, tree/timeline placement, and pre-F15 runs without `http.end`. Fixtures `shared_inflight.js`, `shared_settled.js`, `shared_reject.js`, `mutex_queue.js`, `response_origin.js`, helper `_serve.js`; the spikes behind them are in `spikes/causal/`, 38 checks). Before that, 130 / 130 on `feat/tui-visual-polish` (adds `test_tui_polish.py`: 12; note that Textual's `run_test()` hides toasts unless `notifications=True`). Before that, 118 / 118 on Windows 11 (Python 3.15.2, Node 24.22.1, Textual 8.2.8) on `feat/ultraviolet-tui` (`test_tui.py` rewritten for the redesign: 27 tests; `test_recording.py` added: 5); 102 on `feat/rewind-tui`; 86 on `feat/watched-state`; 74 at `f2aca36` on `feat/recording-reliability` (none run on Linux). Before that: 54 / 54 on Windows 11 and Ubuntu 24.04 under WSL2 at `6320276`; `main` has 56. The tables below describe the suite at `6320276`; the extended-window additions are listed after them.
+**Latest result:** 154 / 154 on `feat/causal-reconstruction` (Windows 11, Python 3.15.2, Node 24.22.1), also on a clean `git archive` export of the branch head. Per file:
 
-## Test suite (verified by reading `tests/`)
+| file | items |
+|---|---|
+| `test_analysis.py` | 26 |
+| `test_causal.py` | 23 |
+| `test_recorder.py` | 23 |
+| `test_tui.py` | 27 |
+| `test_render.py` | 15 |
+| `test_cli.py` | 12 |
+| `test_tui_polish.py` | 12 |
+| `test_store.py` | 11 |
+| `test_recording.py` | 5 |
+
+Spikes: `spikes/check.py` 39/39; `spikes/causal/check.py` 38 checks, 36 PASS, 1 AMBIGUOUS, 1 LIMIT.
+
+### F15 additions (2026-11-28)
+
+| commit | file | tests |
+|---|---|---|
+| `5692216` | `test_causal.py` | the attribution invariant (creation- and trigger-based agree on every story event) on 5 pre-existing recordings; a shared in-flight promise keeps each request's work in that request; `why` on it reports the cross-request wait; a cache hit on a settled promise is not a wait; a mutex hand-off is visible only through the release edge; a shared rejection is the failing request's error with an inherited cause; `http.end` once per response in the calling context; `why` on a response names its sender and path; a response ended by another request; tree and timeline place the response where it was sent; runs without `http.end` say the sender is unknown |
+| `5692216` | `test_cli.py` | `why -r N` end to end (response, crashed request, unknown request) |
+| `4618971` | `test_causal.py` | a thenable job gets no release edge; new promises aren't reactions; an unhandled rejection names who rejected it; `pending` after `end()` then exit; a 3000-deep `await` loop stays linear and merges to one `×3000` node; a response sent by code outside any request; a response path through another request |
+| `9a40d15` | `test_causal.py`, `test_cli.py` | the TUI event detail names the sender; the CLI path section and `timeline --raw` rows |
+
+Fixtures: `_serve.js` (client helper), `shared_inflight.js`, `shared_settled.js`, `shared_reject.js`, `mutex_queue.js`, `response_origin.js`, `thenable_job.js`, `unhandled_shared.js`, `end_then_exit.js`, `await_loop.js`, `flush_queue.js`. The spikes behind them, with event traces: `spikes/causal/`.
+
+**History:** 146 / 146 after `5692216`, 130 / 130 on `feat/tui-visual-polish` (adds `test_tui_polish.py`: 12; note that Textual's `run_test()` hides toasts unless `notifications=True`). Before that, 118 / 118 on Windows 11 (Python 3.15.2, Node 24.22.1, Textual 8.2.8) on `feat/ultraviolet-tui` (`test_tui.py` rewritten for the redesign: 27 tests; `test_recording.py` added: 5); 102 on `feat/rewind-tui`; 86 on `feat/watched-state`; 74 at `f2aca36` on `feat/recording-reliability` (none run on Linux). Before that: 54 / 54 on Windows 11 and Ubuntu 24.04 under WSL2 at `6320276`; `main` has 56. The tables below describe the suite at `6320276`; the extended-window additions are listed after them.
+
+## Test suite at `6320276` (verified by reading `tests/`)
 
 Runner: `pytest` (config in `pyproject.toml`: `testpaths = ["tests"]`, `-p no:cacheprovider`). Most tests spawn real `node` processes against `tests/fixtures/*.js` or the demo; `node` must be on PATH. `tests/conftest.py` provides `record` (runs a fixture with the recorder, returns events/stdout/stderr/exit code; can kill on a condition) and `rewind_home` (isolated `REWIND_HOME` in `tmp_path`).
 
@@ -72,6 +99,8 @@ Each milestone's suite was **re-run at its own commit during the documentation a
 | `6320276` | compatibility fixes | 54 | 54 passed | 45-column switch in both Rich modes, short terminals |
 
 M0 is not in the table: its 39 checks run under `spikes/check.py`, not pytest (see below).
+
+Later counts, from the run at the time rather than an audit re-run: 74 (`f2aca36`), 86 (`feat/watched-state`), 102 (`feat/rewind-tui`), 118 (`feat/ultraviolet-tui`), 130 (`feat/tui-visual-polish`, `bbd4eb5`), 146 (`5692216`), 154 (`9a40d15` and `1925dd2`; `4618971` was checked on its own with the causal, analysis, render and TUI files, 90 passed).
 
 ## Where and how the suite has been run
 
