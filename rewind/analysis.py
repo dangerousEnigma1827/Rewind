@@ -114,56 +114,84 @@ class Run:
     # call): following tid would hand the awaiting request's work to the creator's request (spikes/causal S3).
     def chain(self, aid: int) -> list[Event]:
         """init events from `aid` up to the root, nearest first, following the creating execution (DERIVED)."""
-        return self._walk(aid, creator)
+        return list(self.ancestors(aid))
 
-    def trigger_chain(self, aid: int) -> list[Event]:
-        """The same walk over triggerAsyncId links (for a promise reaction: the promise it continues)."""
-        return self._walk(aid, lambda i: i.tid)
-
-    def _walk(self, aid: int, up) -> list[Event]:
-        out, seen = [], set()
+    def ancestors(self, aid: int):
+        """chain() lazily: callers looking for the nearest match don't walk a thousands-deep await loop."""
+        seen = set()
         while aid in self.inits and aid not in seen:
             seen.add(aid)
-            out.append(self.inits[aid])
-            aid = up(self.inits[aid])
-        return out
+            yield self.inits[aid]
+            aid = creator(self.inits[aid])
 
     def request_of(self, aid: int | None) -> int | None:
         """The request whose code (transitively) scheduled `aid`: the creation chain reaches its handler."""
-        return self._request(aid, self.chain, self._req_cache)
+        return self._request(aid, creator, self._req_cache)
 
     def trigger_request_of(self, aid: int | None) -> int | None:
         """The request reached by trigger links alone (what Rewind used before F15; kept to report disagreement)."""
-        return self._request(aid, self.trigger_chain, self._trig_cache)
+        return self._request(aid, lambda i: i.tid, self._trig_cache)
 
-    def _request(self, aid, walk, cache) -> int | None:
+    def _request(self, aid, up, cache) -> int | None:
+        """First request anchor on the walk from `aid`. Every resource on the walk is cached with the answer, so a
+        long `await` loop (each continuation created by the previous one) costs O(depth) once, not per event."""
         if aid is None:
             return None
-        if aid not in cache:
-            hit = next((self.anchors[i.aid] for i in walk(aid) if i.aid in self.anchors), None)
-            if hit is None and aid in self.anchors:
+        path, seen, hit = [], set(), None
+        while aid is not None and aid not in seen:
+            if aid in cache:
+                hit = cache[aid]
+                break
+            path.append(aid)
+            if aid in self.anchors:
                 hit = self.anchors[aid]
-            cache[aid] = hit
-        return cache[aid]
+                break
+            seen.add(aid)
+            i = self.inits.get(aid)
+            aid = up(i) if i else None
+        for a in path:
+            cache[a] = hit
+        return hit
 
     # ---- what released a callback (promise reactions only) --------------------------
     def released(self, aid: int, at: int | None = None) -> tuple[Event, bool] | None:
         """For a promise reaction `aid` (a then/await continuation): the async.resolve of the promise it continues
-        that precedes its run at or before seq `at` (default: its last run), and whether it actually waited, i.e.
-        was created before that settlement. None for timers, I/O and handlers: they run on their own clock."""
+        that precedes its run, and whether it actually waited, i.e. was created before that settlement.
+
+        None unless the run in progress at seq `at` (default: the first run) is the reaction's FIRST run: Node runs a thenable
+        job (a then-callback returning a thenable) as a later run of the same asyncId, and that run wasn't released
+        by the parent. None for promises whose trigger is their own creating execution (`new Promise`,
+        `Promise.resolve`, async-function promises): they aren't reactions. That also skips the rare reaction
+        made on the very promise whose callback is running, a missed edge rather than a false one. None for timers,
+        I/O and handlers: they run on their own clock."""
+        i = self.inits.get(aid)
+        if i is None or i.type != "PROMISE" or i.tid == i.eid:
+            return None
+        runs = self.fired.get(aid, [])
+        if not runs:
+            return None
+        if at is not None:  # the run in progress at `at` must be the first one
+            current = [b for b in runs if b.seq <= at]
+            if not current or current[-1] is not runs[0]:
+                return None
+        settled = [r for r in self.resolves.get(i.tid, []) if r.seq < runs[0].seq]
+        return (settled[-1], i.seq < settled[-1].seq) if settled else None
+
+    def settled_by(self, aid: int, at: int) -> Event | None:
+        """The async.resolve that settled promise `aid` at or before seq `at`. For an unhandled rejection the error's
+        context is the rejected promise itself, which never ran: this says who rejected it."""
         i = self.inits.get(aid)
         if i is None or i.type != "PROMISE":
             return None
-        runs = [b for b in self.fired.get(aid, []) if at is None or b.seq <= at]
-        if not runs:
-            return None
-        settled = [r for r in self.resolves.get(i.tid, []) if r.seq < runs[-1].seq]
-        return (settled[-1], i.seq < settled[-1].seq) if settled else None
+        rs = [r for r in self.resolves.get(aid, []) if r.seq <= at]
+        return rs[-1] if rs else None
 
     def release_chain(self, aid: int, at: int | None = None) -> tuple[list[tuple[int, Event, bool]], int]:
         """From a callback context back to what released it, through Node's internal reaction promises
         (adoption, Promise.all, events.once). Returns ([(reaction aid, resolve event, waited)], releaser aid),
-        nearest first; the releaser is the first context that wasn't itself released (a timer, I/O, a handler)."""
+        nearest first; the releaser is the first context that wasn't itself released (a timer, I/O, a handler).
+        A hop that didn't wait (its promise had already settled) ends the chain: what settled it earlier didn't hold
+        this callback back, and walking on would make an `await` loop quadratic."""
         hops, seen = [], set()
         while aid not in seen:
             seen.add(aid)
@@ -172,6 +200,8 @@ class Run:
                 break
             hops.append((aid, *hit))
             aid, at = hit[0].eid, hit[0].seq
+            if not hit[1]:
+                break
         return hops, aid
 
     def site(self, aid: int) -> dict | None:
@@ -190,9 +220,21 @@ class Run:
         if f:
             frm = f" from {short_fn(f['fn'])}" if short_fn(f["fn"]) not in ("<anonymous>", i.name) else ""
         else:  # internal hop (e.g. fs read step): name the user code it continues
-            up = next((user_frame(c.stack) for c in self.chain(aid)[1:] if user_frame(c.stack)), None)
+            up = next((user_frame(c.stack) for c in self.ancestors(creator(i)) if user_frame(c.stack)), None)
             frm = f" via {short_fn(up['fn'])}" if up and short_fn(up["fn"]) != "<anonymous>" else ""
         return f"{i.type}{name}{frm}"
+
+    def user_hops(self, aid: int) -> list[tuple[Event, int]]:
+        """user_chain() with consecutive identical hops (same type, callback and creation site, as an `await` in a
+        loop gives) merged: [(nearest hop of the run, how many)]."""
+        out: list[tuple[Event, int]] = []
+        for i in self.user_chain(aid):
+            if out and i.aid not in self.anchors and out[-1][0].aid not in self.anchors and \
+                    (out[-1][0].type, out[-1][0].name, self.site(out[-1][0].aid)) == (i.type, i.name, self.site(i.aid)):
+                out[-1] = (out[-1][0], out[-1][1] + 1)
+            else:
+                out.append((i, 1))
+        return out
 
     def user_chain(self, aid: int) -> list[Event]:
         """Ancestry with frameless internal hops (fs open/stat/read, bare promises) collapsed,
@@ -275,6 +317,7 @@ class Node:
     hidden: int = 0                                     # collapsed frameless hops folded into this node
     released_by: tuple[int, Event] | None = None        # (releaser aid, settling resolve): only when that releaser
                                                         # belongs to another request, or to none
+    repeat: int = 1                                     # identical nested resources merged into this one (a loop)
 
 
 def interesting(e: Event) -> bool:
@@ -286,7 +329,10 @@ def build_tree(run: Run, root: int = 1, full: bool = False) -> tuple[Node, int]:
     frameless internal hops into their nearest user-visible descendant. Returns (root, pruned_count).
 
     Parent = the execution that created the resource. A response is shown under the callback that called
-    res.end() (http.end) when that callback belongs to the same request; otherwise it stays on the request."""
+    res.end() (http.end) when that callback belongs to the same request; otherwise it stays on the request.
+    Unless `full`, a chain of identical resources (same type, callback and site, each the only child of the last,
+    with nothing emitted on the way: an `await` in a loop) merges into one node with a `repeat` count.
+    Built iteratively: such chains can be thousands deep."""
     pruned = 0
     moved: dict[int, list[Event]] = {}
     for r in run.requests.values():
@@ -294,29 +340,49 @@ def build_tree(run: Run, root: int = 1, full: bool = False) -> tuple[Node, int]:
             moved.setdefault(r.end.eid, []).append(r.outbound)
     gone = {e.seq for es in moved.values() for e in es}
 
-    def build(aid: int) -> Node | None:
-        nonlocal pruned
+    order, stack, seen = [], [root], set()
+    while stack:  # preorder; reversed, every resource comes after all of its descendants
+        aid = stack.pop()
+        if aid in seen:
+            continue
+        seen.add(aid)
+        order.append(aid)
+        stack.extend(run.children.get(aid, []))
+    built: dict[int, Node | None] = {}
+    for aid in reversed(order):
         events = [e for e in run.emitted.get(aid, []) if interesting(e) and e.seq not in gone]
         node = Node(aid, run.inits.get(aid), events=sorted(events + moved.get(aid, []), key=lambda e: e.seq))
-        hops, releaser = run.release_chain(aid) if node.init and node.init.type == "PROMISE" else ([], aid)
-        if hops and hops[0][2] and run.request_of(releaser) != run.request_of(aid):
-            node.released_by = (releaser, hops[-1][1])
-        for c in run.children.get(aid, []):
-            child = build(c)
-            if child:
-                node.children.append(child)
-        if full or aid == root:
-            return node
-        if not node.events and not node.children and aid not in run.anchors:
+        if node.init and node.init.type == "PROMISE":
+            hops, releaser = run.release_chain(aid)
+            if hops and hops[0][2] and run.request_of(releaser) != run.request_of(aid):
+                node.released_by = (releaser, hops[-1][1])
+        node.children = [c for c in (built.pop(k, None) for k in run.children.get(aid, [])) if c]
+        built[aid] = node if full or aid == root else _simplify(run, node)
+        if built[aid] is None:
             pruned += 1
-            return None
-        if node.init and not user_frame(node.init.stack) and aid not in run.anchors and not node.events:
-            if len(node.children) == 1:  # fold internal hop into its only child
-                node.children[0].hidden += node.hidden + 1
-                return node.children[0]
-        return node
+    return built[root], pruned
 
-    return build(root), pruned
+
+def _same_kind(run: Run, a: Node, b: Node) -> bool:
+    return (a.init is not None and b.init is not None and a.init.type == b.init.type and a.init.name == b.init.name
+            and run.site(a.aid) == run.site(b.aid) and a.released_by is None and b.released_by is None)
+
+
+def _simplify(run: Run, node: Node) -> Node | None:
+    """Prune a quiet leaf, fold a frameless hop into its only child, merge a repeat into its identical child."""
+    quiet = not node.events and node.aid not in run.anchors
+    if quiet and not node.children:
+        return None
+    if quiet and len(node.children) == 1:
+        child = node.children[0]
+        if node.init and not user_frame(node.init.stack):  # fold internal hop into its only child
+            child.hidden += node.hidden + 1
+            return child
+        if _same_kind(run, node, child):
+            child.repeat += node.repeat
+            child.hidden += node.hidden
+            return child
+    return node
 
 
 # ---- why -----------------------------------------------------------------------------
@@ -358,10 +424,11 @@ def investigate(run: Run, target: Event) -> Investigation:
         what = "a rejected promise" if chain[0].type == "PROMISE" and is_error else f"the callback of {run.describe(ctx)}"
         site = run.site(ctx)  # a request anchor has no creation site in user code
         F.append(Finding(OBSERVED, f"ran inside {what}{', created at ' + where(site) if site else ''}", [chain[0].seq, target.seq]))
-    hops = run.user_chain(ctx)
-    if len(hops) > 1:
-        path = " ← ".join(run.describe(h.aid) if h.aid in run.anchors else f"{run.describe(h.aid)} ({where(run.site(h.aid))})" for h in hops)
-        F.append(Finding(DERIVED, f"causal chain: {path}", [h.seq for h in hops]))
+    hops = run.user_hops(ctx)
+    if len(hops) > 1 or (hops and hops[0][1] > 1):
+        path = " ← ".join((run.describe(h.aid) if h.aid in run.anchors else f"{run.describe(h.aid)} ({where(run.site(h.aid))})")
+                          + (f" ×{n}" if n > 1 else "") for h, n in hops)
+        F.append(Finding(DERIVED, f"causal chain: {path}", [h.seq for h, _ in hops]))
 
     rid = run.request_of(ctx)
     req = run.requests.get(rid) if rid else None
@@ -425,33 +492,57 @@ def _promise_name(run: Run, reaction: int) -> str:
     return f"the promise created at {where(run.site(p))}" if run.site(p) else "a promise created inside Node or a library"
 
 
+def _in(run: Run, aid: int) -> str:
+    """`Timeout work (app.js:12)`: a context and, when it has one, its creation site in user code."""
+    site = run.site(aid)
+    return f"{run.describe(aid)}{' (' + where(site) + ')' if site else ''}"
+
+
 def _wait_findings(run: Run, target: Event, ctx: int, req: Request | None) -> list[Finding]:
-    """What the target's callback waited on and who settled it (promise reactions only)."""
-    hops, releaser = run.release_chain(ctx, target.seq)
-    if not hops:
-        return []
+    """What the target's callback waited on and who settled it (promise reactions only). For an unhandled
+    rejection the context is the rejected promise, which never ran: then, who rejected it and from where."""
     F: list[Finding] = []
-    first_aid, first_res, waited = hops[0]
-    cont = run.inits[first_aid]
-    awaited = _promise_name(run, first_aid)
-    if not waited:
-        F.append(Finding(DERIVED, f"it awaited {awaited}, which had already settled (seq {first_res.seq}) before the "
-                                  f"await (seq {cont.seq}): it did not wait on other work", [first_res.seq, cont.seq]))
-        return F
-    last_aid, last, _ = hops[-1]
-    site = run.site(releaser)
-    F.append(Finding(OBSERVED, f"{_promise_name(run, last_aid)} settled at seq {last.seq} inside "
-                               f"{run.describe(releaser)}{' (' + where(site) + ')' if site else ''}", [last.seq]))
-    ran = [b for b in run.fired.get(first_aid, []) if b.seq <= target.seq]
-    ms = (ran[-1].t - cont.t) / 1000 if ran else 0
-    via = (f" ({awaited} settled through {plural_(len(hops) - 1, 'internal promise hop')} from it)"
-           if len(hops) > 1 else "")
-    F.append(Finding(DERIVED, f"so this callback ran only after that settlement: it awaited {awaited} from seq "
-                              f"{cont.seq} and resumed {ms:.1f} ms later{via}", [cont.seq, *[h[1].seq for h in hops]]))
+    hops, releaser = run.release_chain(ctx, target.seq)
+    rejection = (target.kind == "error.uncaught" and (target.data or {}).get("origin") == "unhandledRejection"
+                 and not run.fired.get(ctx))
+    if rejection:
+        rejected = run.settled_by(ctx, target.seq)
+        if rejected is None:
+            return []
+        site = run.site(ctx)
+        F.append(Finding(OBSERVED, f"the rejected promise{' (created at ' + where(site) + ')' if site else ''} was "
+                                   f"settled at seq {rejected.seq} inside {_in(run, rejected.eid)}", [rejected.seq]))
+        hops, releaser = run.release_chain(rejected.eid, rejected.seq)
+        last = hops[-1][1] if hops else rejected
+        if hops:
+            F.append(Finding(OBSERVED, f"{_promise_name(run, hops[-1][0])} settled at seq {last.seq} inside "
+                                       f"{_in(run, releaser)}", [last.seq]))
+            F.append(Finding(DERIVED, f"so the rejection started in {run.describe(releaser)} and reached this promise "
+                                      f"through {plural_(len(hops), 'promise hop')}",
+                             [last.seq, *[h[1].seq for h in hops], rejected.seq]))
+    else:
+        if not hops:
+            return []
+        first_aid, first_res, waited = hops[0]
+        cont = run.inits[first_aid]
+        awaited = _promise_name(run, first_aid)
+        if not waited:
+            F.append(Finding(DERIVED, f"it awaited {awaited}, which had already settled (seq {first_res.seq}) before the "
+                                      f"await (seq {cont.seq}): it did not wait on other work", [first_res.seq, cont.seq]))
+            return F
+        last_aid, last, _ = hops[-1]
+        F.append(Finding(OBSERVED, f"{_promise_name(run, last_aid)} settled at seq {last.seq} inside {_in(run, releaser)}",
+                         [last.seq]))
+        ms = (run.fired[first_aid][0].t - cont.t) / 1000
+        via = (f" ({awaited} settled through {plural_(len(hops) - 1, 'internal promise hop')} from it)"
+               if len(hops) > 1 else "")
+        F.append(Finding(DERIVED, f"so this callback ran only after that settlement: it awaited {awaited} from seq "
+                                  f"{cont.seq} and resumed {ms:.1f} ms later{via}", [cont.seq, *[h[1].seq for h in hops]]))
     rr = run.request_of(releaser)
     if req and rr != req.id:
         owner = f"request {run.requests[rr].label}" if rr else "work outside any request"
-        F.append(Finding(DERIVED, f"the settling callback belongs to {owner}: {req.label} waited on "
+        how = f"{req.label}'s rejection came from" if rejection else f"{req.label} waited on"
+        F.append(Finding(DERIVED, f"the settling callback belongs to {owner}: {how} "
                                   f"{'work started by ' + owner if rr else owner}", [last.seq, req.inbound.seq]))
         if rr:
             hedge = ("this failure may come from that request's work rather than its own" if target.kind in ERROR_KINDS
@@ -466,36 +557,100 @@ def _wait_findings(run: Run, target: Event, ctx: int, req: Request | None) -> li
 @dataclass
 class Step:
     aid: int
-    how: str          # "arrived" | "scheduled" | "released" (waited on a promise settled by the previous step)
-    start: Event      # the async.before (or http.in) that started this step
+    link: str            # how it follows the previous step: "start" (the request's arrival, first),
+                         # "scheduled" (the previous step created it), "released" (it waited on a promise the previous
+                         # step settled), "unlinked" (no recorded link: another request's arrival, a timer outside any
+                         # request, or a gap in the recording)
+    start: Event         # the async.before (or http.in) that started this step
     request: int | None
+    arrival: bool = False
+
+
+PATH_LIMIT = 10_000  # steps walked back from end(); a longer path starts "unlinked" rather than at the arrival
 
 
 def response_path(run: Run, req: Request) -> list[Step]:
-    """From the request's arrival to its res.end() call: each step is the callback that ran, reached from the
-    previous one either because the previous one scheduled it or because it settled the promise this one awaited.
-    Derived from creation links and promise settlements; [] without an http.end event."""
+    """From the request's arrival to its res.end() call. Walking back from the end() context, the step before a
+    callback is whoever settled the promise it waited on (when it waited) or else whoever created it. Derived from
+    creation links and promise settlements. [] without an http.end event (recordings before F15)."""
     if req.end is None:
         return []
-    steps, aid, at, seen = [], req.end.eid, req.end.seq, set()
-    while aid not in seen and len(steps) < 200:
+    back, aid, at, seen = [], req.end.eid, req.end.seq, set()
+    while aid not in seen and len(back) < PATH_LIMIT:
         seen.add(aid)
-        if aid in run.anchors:  # a request's arrival starts the path: this one's, or another request's
+        if aid in run.anchors:  # a request's arrival: this one's, or another request's
             other = run.requests[run.anchors[aid]]
-            steps.append(Step(aid, "arrived", other.inbound, other.id))
+            back.append(Step(aid, "start", other.inbound, other.id, arrival=True))
             break
         runs = [b for b in run.fired.get(aid, []) if b.seq <= at]
         i = run.inits.get(aid)
         if not runs or i is None:
             break
         hops, releaser = run.release_chain(aid, at)
-        if hops and hops[0][2]:  # it waited: the step before it is whoever settled the promise
-            steps.append(Step(aid, "released", runs[-1], run.request_of(aid)))
+        if hops and hops[0][2]:
+            back.append(Step(aid, "released", runs[-1], run.request_of(aid)))
             aid, at = releaser, hops[-1][1].seq
         else:
-            steps.append(Step(aid, "scheduled", runs[-1], run.request_of(aid)))
+            back.append(Step(aid, "scheduled", runs[-1], run.request_of(aid)))
             aid, at = creator(i), i.seq
-    return list(reversed(steps))
+    steps = back[::-1]
+    if steps and not (steps[0].arrival and steps[0].request == req.id):
+        steps[0].link = "unlinked"
+        steps.insert(0, Step(req.anchor, "start", req.inbound, req.id, arrival=True))
+    return steps
+
+
+@dataclass
+class PathEntry:
+    """One line of a response path as shown: a step, or a run of internal steps folded into one."""
+    link: str            # Step.link of its first step
+    what: str            # "arrived", "request #6 GET /x arrived", "Timeout later", "3 internal steps"
+    site: str | None     # creation site in user code
+    request: int | None  # set when the step belongs to ANOTHER request than the one explained
+    ms: float            # since the explained request arrived
+    seqs: list[int]
+    times: int = 1       # consecutive identical steps merged into this entry (e.g. an `await` in a loop)
+    arrival: bool = False
+
+
+ARROW = {"start": "", "scheduled": "→", "released": "⇠", "unlinked": "…"}
+
+
+def path_entries(run: Run, req: Request, steps: list[Step]) -> list[PathEntry]:
+    """Steps as shown: two or more consecutive internal steps (no frame from user code, reached by scheduling,
+    neither first nor last) fold into one entry, and consecutive identical entries (same link, callback, site
+    and request, as an `await` in a loop gives) merge into one with a count and the time of the last."""
+    out: list[PathEntry] = []
+    for e in _entries(run, req, steps):
+        p = out[-1] if out else None
+        if p and (p.link, p.what, p.site, p.request) == (e.link, e.what, e.site, e.request) and e.link != "start":
+            p.times, p.ms, p.seqs = p.times + e.times, e.ms, p.seqs + e.seqs
+        else:
+            out.append(e)
+    return out
+
+
+def _entries(run: Run, req: Request, steps: list[Step]) -> list[PathEntry]:
+    t0, out, k = req.inbound.t, [], 0
+    internal = lambda j: (0 < j < len(steps) - 1 and not steps[j].arrival and steps[j].link == "scheduled"
+                          and run.site(steps[j].aid) is None)
+    while k < len(steps):
+        j = k
+        while internal(k) and internal(j + 1):
+            j += 1
+        s = steps[k]
+        other = s.request if s.request not in (req.id, None) else None
+        if j > k:
+            out.append(PathEntry(s.link, f"{j - k + 1} internal steps", None, other, (steps[j].start.t - t0) / 1000,
+                                 [x.start.seq for x in steps[k:j + 1]]))
+        else:
+            what = (("arrived" if s.request == req.id else f"request {run.requests[s.request].label} arrived")
+                    if s.arrival else run.describe(s.aid))
+            site = None if s.arrival else run.site(s.aid)
+            out.append(PathEntry(s.link, what, where(site) if site else None, None if s.arrival else other,
+                                 (s.start.t - t0) / 1000, [s.start.seq], arrival=s.arrival))
+        k = j + 1
+    return out
 
 
 def response_findings(run: Run, req: Request) -> list[Finding]:
@@ -512,7 +667,7 @@ def response_findings(run: Run, req: Request) -> list[Finding]:
     if f:
         F.append(Finding(OBSERVED, f"res.end() was called in {who} at {where(f)}", [end.seq]))
     else:
-        up = next((c for c in run.chain(end.eid) if user_frame(c.stack)), None)
+        up = next((c for c in run.ancestors(end.eid) if user_frame(c.stack)), None)
         F.append(Finding(OBSERVED, f"res.end() was called by Node internals in {who}, with no frame from your code "
                                    f"(for example stream.pipe ending the response)", [end.seq]))
         if up:
@@ -520,47 +675,41 @@ def response_findings(run: Run, req: Request) -> list[Finding]:
                              [up.seq, end.seq]))
     er = run.request_of(end.eid)
     if er != req.id:
-        owner = f"request {run.requests[er].label}" if er else "code outside any request"
-        F.append(Finding(DERIVED, f"that callback belongs to {owner}, not to {req.label}: another request's code ended "
+        owner, who_ended = ((f"request {run.requests[er].label}", "another request's code") if er else
+                            ("code outside any request", "code outside any request"))
+        F.append(Finding(DERIVED, f"that callback belongs to {owner}, not to {req.label}: {who_ended} ended "
                                   f"this response", [end.seq, req.inbound.seq]))
     steps = response_path(run, req)
-    if steps and steps[0].request != req.id:  # started by another request's arrival: show this one's arrival first
-        steps.insert(0, Step(req.anchor, "own", req.inbound, req.id))
     if len(steps) > 1:
         F.extend(_path_findings(run, req, steps, end))
     return F
 
 
-def _step_label(run: Run, s: Step, req: Request) -> str:
-    if s.how in ("arrived", "own"):
-        return "arrived" if s.request == req.id else f"request {run.requests[s.request].label} arrived"
-    site = run.site(s.aid)
-    other = f" [request #{s.request}]" if s.request not in (req.id, None) else ""
-    return f"{run.describe(s.aid)}{' ' + where(site) if site else ''}{other}"
+def entry_text(e: PathEntry) -> str:
+    return " ".join(x for x in (ARROW[e.link], e.what, e.site, f"×{e.times}" if e.times > 1 else None,
+                                f"[request #{e.request}]" if e.request else None) if x)
 
 
 def _path_findings(run: Run, req: Request, steps: list[Step], end: Event) -> list[Finding]:
-    t0, total = req.inbound.t, end.t - req.inbound.t
-    parts, k = [], 0
-    while k < len(steps):
-        s = steps[k]
-        if s.how not in ("arrived", "own") and not run.site(s.aid) and 0 < k < len(steps) - 1:
-            j = k  # fold a run of internal steps (no frame from user code) into one entry
-            while j + 1 < len(steps) - 1 and not run.site(steps[j + 1].aid) and steps[j + 1].how not in ("arrived", "own"):
-                j += 1
-            if j > k:
-                parts.append(f"→ {j - k + 1} internal steps +{(steps[j].start.t - t0) / 1000:.1f} ms")
-                k = j + 1
-                continue
-        arrow = {"own": "", "arrived": "… " if k else "", "released": "⇠ ", "scheduled": "→ "}[s.how]
-        parts.append(f"{arrow}{_step_label(run, s, req)} +{(s.start.t - t0) / 1000:.1f} ms")
-        k += 1
-    F = [Finding(DERIVED, f"path to the response (→ scheduled, ⇠ waited until settled, … no recorded link): "
-                          f"{'  '.join(parts)}  end() +{total / 1000:.1f} ms", [s.start.seq for s in steps] + [end.seq])]
-    gaps = [(steps[k + 1].start.t - steps[k].start.t, steps[k], steps[k + 1]) for k in range(len(steps) - 1)]
-    dt, a, b = max(gaps, key=lambda g: g[0])
+    total = end.t - req.inbound.t
+    parts = [f"{entry_text(e)} {e.ms:+.1f} ms" for e in path_entries(run, req, steps)]  # ms since this request arrived
+    F = [Finding(DERIVED, f"path to the response (→ scheduled, ⇠ waited until settled, … no recorded link; ms since "
+                          f"this request arrived): {'  '.join(parts)}  end() {total / 1000:+.1f} ms",
+                 [s.start.seq for s in steps] + [end.seq])]
+    others = sorted({s.request for s in steps if s.request not in (req.id, None)})
+    if others:
+        names = ", ".join(f"request {run.requests[o].label}" for o in others)
+        F.append(Finding(DERIVED, f"the path runs through work of {names}: {req.label}'s response depended on it",
+                         [s.start.seq for s in steps if s.request in others]))
+    # only gaps inside this request's lifetime: steps of another request can start before it arrived
+    gaps = [(b.start.t - a.start.t, a, b) for a, b in zip(steps, steps[1:])
+            if a.start.t >= req.inbound.t and b.start.t >= a.start.t]
+    dt, a, b = max(gaps, key=lambda g: g[0]) if gaps else (0, None, None)
     if total > 0 and dt / total >= 0.5:
-        name = lambda s: "the arrival" if s.how in ("arrived", "own") and s.request == req.id else _step_label(run, s, req)
+        def name(s: Step) -> str:
+            if s.arrival:
+                return "the arrival" if s.request == req.id else f"the arrival of request {run.requests[s.request].label}"
+            return _in(run, s.aid)
         F.append(Finding(DERIVED, f"most of the time ({dt / 1000:.1f} of {total / 1000:.1f} ms) passed between "
                                   f"{name(a)} and {name(b)}", [a.start.seq, b.start.seq]))
     return F
@@ -783,6 +932,9 @@ def pending(run: Run) -> Pending:
         elif st == "unresolved":
             F.append(Finding(DERIVED, f"request {r.label} arrived (seq {r.inbound.seq}) but no response was recorded: {reason}",
                              [r.inbound.seq] + ([end.seq] if end is not None else [])))
+            if r.end is not None:  # the code did answer; the response just never finished going out
+                F.append(Finding(OBSERVED, f"request {r.label}: res.end() was called at seq {r.end.seq} in "
+                                           f"{_in(run, r.end.eid)}, but the response never finished", [r.end.seq]))
 
     ops: list[tuple[int | None, Event]] = []
     if complete:
@@ -818,7 +970,11 @@ def pending(run: Run) -> Pending:
                 if st != "unresolved":
                     continue
                 r, mine = run.requests[rid], [i for orid, i in ops if orid == rid]
-                if mine:
+                if r.end is not None:
+                    F.append(Finding(INFERRED, f"request {r.label} was answered by your code, but the program ended "
+                                               f"before the response finished sending (it {ended})",
+                                     [r.end.seq, end.seq]))
+                elif mine:
                     i = max(mine, key=lambda x: x.seq)  # the most recent unfinished step is what it was waiting on
                     verb = fate(i)
                     head = "likely stalled" if not verb.startswith("was not due") else "likely still waiting"
